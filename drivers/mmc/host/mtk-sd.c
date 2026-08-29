@@ -3154,6 +3154,8 @@ static int msdc_drv_probe(struct platform_device *pdev)
 		goto host_free;
 	}
 
+	pinctrl_select_state(host->pinctrl, host->pins_default);
+
 	host->pins_uhs = pinctrl_lookup_state(host->pinctrl, "state_uhs");
 	if (IS_ERR(host->pins_uhs)) {
 		ret = PTR_ERR(host->pins_uhs);
@@ -3263,14 +3265,6 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(host->dev, MTK_MMC_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(host->dev);
 	pm_runtime_enable(host->dev);
-
-	if (mmc->host_function == MSDC_EMMC) {
-		mmc->ocr_avail_mmc = MMC_VDD_EMMC;
-		mmc->ocr_avail = mmc->ocr_avail_mmc;
-	} else if (mmc->host_function == MSDC_SD) {
-		mmc->ocr_avail_sd = MMC_VDD_SD;
-		mmc->ocr_avail = mmc->ocr_avail_sd;
-	}
 
 	ret = mmc_add_host(mmc);
 
