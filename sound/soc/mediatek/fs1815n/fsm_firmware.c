@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
-
 /**
  * Copyright (C) Fourier Semiconductor Inc. 2016-2020. All rights reserved.
  * 2019-02-22 File created.
@@ -26,11 +24,11 @@ static void *fsm_devm_kzalloc(struct device *dev, void *buf, size_t size)
 	return devm_buf;
 }
 
-static void fsm_devm_kfree(struct device *dev, void *buf)
+static void fsm_devm_kfree(struct device *dev, void **buf)
 {
-	if (buf) {
-		devm_kfree(dev, buf);
-		buf = NULL;
+	if (*buf) {
+		devm_kfree(dev, *buf);
+		*buf = NULL;
 	}
 }
 #endif
@@ -41,7 +39,7 @@ static void fsm_firmware_inited(const struct firmware *cont, void *context)
 	int ret;
 
 	if (dev == NULL || cont == NULL) {
-		pr_info("bad parameter");
+		pr_err("bad parameter");
 		return;
 	}
 
@@ -51,7 +49,7 @@ static void fsm_firmware_inited(const struct firmware *cont, void *context)
 	fsm_mutex_unlock();
 	release_firmware(cont);
 	if (ret) {
-		pr_info("parse firmware fail: %d", ret);
+		pr_err("parse firmware fail: %d", ret);
 		g_fsm_fw_init = 0;
 	}
 }
@@ -62,7 +60,7 @@ int fsm_firmware_init(char *fw_name)
 	int ret;
 
 	if (fw_name == NULL) {
-		pr_info("invalid firmware name");
+		pr_err("invalid firmware name");
 		return -EINVAL;
 	}
 	if (fsm_get_presets() || g_fsm_fw_init) {
@@ -70,7 +68,7 @@ int fsm_firmware_init(char *fw_name)
 	}
 	dev = fsm_get_pdev();
 	if (dev == NULL) {
-		pr_info("invalid device");
+		pr_err("invalid device");
 		return -EINVAL;
 	}
 
@@ -79,7 +77,7 @@ int fsm_firmware_init(char *fw_name)
 			fw_name, dev, GFP_KERNEL,
 			dev, fsm_firmware_inited);
 	if (ret) {
-		pr_info("request %s failed: %d\n", fw_name, ret);
+		pr_err("request %s failed: %d\n", fw_name, ret);
 		return ret;
 	}
 	g_fsm_fw_init = 1;
@@ -95,34 +93,34 @@ int fsm_firmware_init_sync(char *fw_name)
 	int ret;
 
 	if (fw_name == NULL) {
-		pr_info("invalid firmware name");
+		pr_err("invalid firmware name");
 		return -EINVAL;
 	}
 	if (cfg->force_fw) {
 		pr_info("force loading");
 		cfg->force_fw = false;
 		fsm_set_presets(NULL);
-		g_fsm_fw_init = 0;
 	}
-	if (fsm_get_presets() || g_fsm_fw_init) {
+	if (fsm_get_presets()) {
 		return MODULE_INITED;
 	}
 	dev = fsm_get_pdev();
 	if (dev == NULL) {
-		pr_info("invalid device");
+		pr_err("invalid device");
 		return -EINVAL;
 	}
 
+	g_fsm_fw_init = 0;
 	pr_info("loading %s in sync mode", fw_name);
 	ret = request_firmware(&fw_cont, fw_name, dev);
 	if (ret) {
-		pr_info("request %s failed: %d\n", fw_name, ret);
+		pr_err("request %s failed: %d\n", fw_name, ret);
 		return ret;
 	}
 	ret = fsm_parse_preset(fw_cont->data, (uint32_t)fw_cont->size);
 	release_firmware(fw_cont);
 	if (ret) {
-		pr_info("parse firmware fail: %d", ret);
+		pr_err("parse firmware fail: %d", ret);
 		return ret;
 	}
 	g_fsm_fw_init = 1;
@@ -132,6 +130,7 @@ int fsm_firmware_init_sync(char *fw_name)
 
 void fsm_firmware_deinit(void)
 {
+	fsm_set_presets(NULL);
 	g_fsm_fw_init = 0;
 }
 #endif

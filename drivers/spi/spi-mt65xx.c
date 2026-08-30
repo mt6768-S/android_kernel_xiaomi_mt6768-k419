@@ -863,6 +863,15 @@ static int mtk_spi_probe(struct platform_device *pdev)
 				goto err_put_master;
 			}
 		}
+
+		/*
+		 * pad-select kullanan denetleyicide chipselect sayisi pad
+		 * sayisidir. SPI cekirdegi bunu cs-gpios'tan turetiyor ve
+		 * cs-gpios yoksa 1'de birakiyor; o zaman ikinci pad'deki
+		 * aygit kaydedilemiyor ve asagidaki pad_num kontrolu
+		 * probe'u dusuruyor.
+		 */
+		master->num_chipselect = mdata->pad_num;
 	}
 
 	pm_qos_add_request(&mdata->spi_qos_request, PM_QOS_CPU_DMA_LATENCY,
@@ -968,12 +977,11 @@ static int mtk_spi_probe(struct platform_device *pdev)
 			goto err_disable_runtime_pm;
 		}
 
-		if (!master->cs_gpios && master->num_chipselect > 1) {
-			dev_err(&pdev->dev,
-				"cs_gpios not specified and num_chipselect > 1\n");
-			ret = -EINVAL;
-			goto err_disable_runtime_pm;
-		}
+		/*
+		 * pad-select donanimda secim yaptigi icin ayrica cs-gpios
+		 * gerekmiyor; eski kontrol coklu pad'i gereksiz yere
+		 * reddediyordu.
+		 */
 
 		if (master->cs_gpios) {
 			for (i = 0; i < master->num_chipselect; i++) {
