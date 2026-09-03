@@ -1729,6 +1729,15 @@ static void *mdp_pool_alloc_impl(struct dma_pool *pool,
 	void *va;
 	dma_addr_t pa;
 
+	/* Havuz henuz olusturulmamis olabilir: mdp_rb_pool cmdq kendi
+	 * init'inde dma_pool_create ile kuruluyor, ama disp_probe_1
+	 * cmdqBackupAllocateSlot'u ondan once cagirabiliyor. O durumda
+	 * dma_pool_alloc(NULL) &pool->lock'u cozup panik atiyor.
+	 * NULL donmek guvenli: cagiran zaten duz DMA ayirmaya dusuyor.
+	 */
+	if (!pool)
+		return NULL;
+
 	if (atomic_inc_return(cnt) > limit) {
 		/* not use pool, decrease to value before call */
 		atomic_dec(cnt);

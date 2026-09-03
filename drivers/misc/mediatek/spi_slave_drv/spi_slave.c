@@ -314,6 +314,17 @@ int spislv_init(void)
 	struct spi_message msg;
 	int ret = 0;
 
+	/* slv_data.spi yalnizca spi surucusunun probe'unda atanir.
+	 * Kople aygit hic probe etmediyse (veya ertelendiyse) asagidaki
+	 * spi_sync NULL'i cozup boot'ta panik atiyor; bu yol
+	 * bdg_is_bdg_connected -> primary_display_init uzerinden
+	 * mtkfb probe'unda kosuyor.
+	 */
+	if (!slv_data.spi) {
+		pr_notice("%s: spi kole aygiti yok\n", __func__);
+		return -ENODEV;
+	}
+
 	spislv_chip_info.tick_delay = slv_data.low_speed_tick_delay;
 	slv_data.tx_speed_hz = SPI_TX_LOW_SPEED_HZ;
 	slv_data.rx_speed_hz = SPI_RX_LOW_SPEED_HZ;

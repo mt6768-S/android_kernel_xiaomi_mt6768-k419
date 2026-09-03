@@ -879,6 +879,32 @@ static void ram_console_update(void)
 #endif
 }
 
+/*
+ * MTCMOS ack beklemeleri icin sayac tabanli sinir.
+ *
+ * Bu dongular timer_probe() oncesinde kosuyor, o yuzden zaman asimi
+ * kurulamiyor; donme sayisiyla siniriyoruz. Sinir gercek donanim icin
+ * fazlasiyla genis: MTCMOS ack'i mikrosaniyeler icinde gelir. Saglikli
+ * cihazda davranis DEGISMEZ; yalnizca bozuk durumda sonsuz donme yerine
+ * hangi alanin hangi adimda takildigi basilip boot devam eder.
+ */
+#define SPM_ACK_MAX_SPINS	1000000u
+
+#define spm_wait_ack(cond)                                                                              \
+do {                                                                                                    \
+	unsigned int __spins = 0;                                                                       \
+                                                                                                        \
+	while (cond) {                                                                                  \
+		ram_console_update();                                                                   \
+		if (++__spins > SPM_ACK_MAX_SPINS) {                                                    \
+			pr_err("[CCF] %s: MTCMOS ack gelmedi, vazgecildi (DBG_ID=%d STA=%d STEP=%d)\n", \
+			       __func__, DBG_ID, DBG_STA, DBG_STEP);                                    \
+			break;                                                                          \
+		}                                                                                       \
+	}                                                                                               \
+} while (0)
+
+
 /* auto-gen begin*/
 int spm_mtcmos_ctrl_md1_bus_prot(int state)
 {
@@ -895,28 +921,19 @@ int spm_mtcmos_ctrl_md1_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, MD1_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& MD1_PROT_STEP1_0_ACK_MASK)
-			!= MD1_PROT_STEP1_0_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & MD1_PROT_STEP1_0_ACK_MASK) != MD1_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, MD1_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& MD1_PROT_STEP2_0_ACK_MASK)
-			!= MD1_PROT_STEP2_0_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & MD1_PROT_STEP2_0_ACK_MASK) != MD1_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 1" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, MD1_PROT_STEP2_1_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1)
-			& MD1_PROT_STEP2_1_ACK_MASK)
-			!= MD1_PROT_STEP2_1_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & MD1_PROT_STEP2_1_ACK_MASK) != MD1_PROT_STEP2_1_ACK_MASK);
 #endif
 	} else {    /* STA_POWER_ON */
 		/* TINFO="Release bus protect - step2 : 0" */
@@ -980,14 +997,7 @@ int spm_mtcmos_ctrl_md1_pwr(int state)
 		spm_write(MD1_PWR_CON, spm_read(MD1_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & MD1_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & MD1_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & MD1_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & MD1_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off MD1" */
@@ -1048,10 +1058,7 @@ int spm_mtcmos_ctrl_conn_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, CONN_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& CONN_PROT_STEP1_0_ACK_MASK)
-			!= CONN_PROT_STEP1_0_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & CONN_PROT_STEP1_0_ACK_MASK) != CONN_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step1 : 1" */
@@ -1070,10 +1077,7 @@ int spm_mtcmos_ctrl_conn_bus_prot(int state)
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, CONN_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& CONN_PROT_STEP2_0_ACK_MASK)
-			!= CONN_PROT_STEP2_0_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & CONN_PROT_STEP2_0_ACK_MASK) != CONN_PROT_STEP2_0_ACK_MASK);
 #endif
 	} else {    /* STA_POWER_ON */
 		/* TINFO="Release bus protect - step2 : 0" */
@@ -1134,14 +1138,7 @@ int spm_mtcmos_ctrl_conn_pwr(int state)
 			spm_read(CONN_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & CONN_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & CONN_PWR_STA_MASK)) {
-		/* No logic between pwr_on and pwr_ack.
-		 * Print SRAM / MTCMOS control and
-		 * PWR_ACK for debug.
-		 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & CONN_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & CONN_PWR_STA_MASK));
 #endif
 		/* TINFO="Finish to turn off CONN" */
 	} else {    /* STA_POWER_ON */
@@ -1193,28 +1190,19 @@ int spm_mtcmos_ctrl_dpy_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, DPY_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& DPY_PROT_STEP1_0_ACK_MASK)
-			!= DPY_PROT_STEP1_0_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & DPY_PROT_STEP1_0_ACK_MASK) != DPY_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step1 : 1" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, DPY_PROT_STEP1_1_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1)
-			& DPY_PROT_STEP1_1_ACK_MASK)
-			!= DPY_PROT_STEP1_1_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & DPY_PROT_STEP1_1_ACK_MASK) != DPY_PROT_STEP1_1_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, DPY_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& DPY_PROT_STEP2_0_ACK_MASK)
-			!= DPY_PROT_STEP2_0_ACK_MASK)
-			ram_console_update();
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & DPY_PROT_STEP2_0_ACK_MASK) != DPY_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 	} else {    /* STA_POWER_ON */
@@ -1261,9 +1249,7 @@ int spm_mtcmos_ctrl_dpy_pwr(int state)
 		spm_write(DPY_PWR_CON, spm_read(DPY_PWR_CON) | DPY_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until DPY_SRAM_PDN_ACK = 1" */
-		while ((spm_read(DPY_PWR_CON) & DPY_SRAM_PDN_ACK)
-			!= DPY_SRAM_PDN_ACK)
-			ram_console_update();
+		spm_wait_ack((spm_read(DPY_PWR_CON) & DPY_SRAM_PDN_ACK) != DPY_SRAM_PDN_ACK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set PWR_ISO = 1" */
@@ -1278,14 +1264,7 @@ int spm_mtcmos_ctrl_dpy_pwr(int state)
 		spm_write(DPY_PWR_CON, spm_read(DPY_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & DPY_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & DPY_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & DPY_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & DPY_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off DPY" */
@@ -1364,50 +1343,32 @@ int spm_mtcmos_ctrl_dis_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, DIS_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1)
-			& DIS_PROT_STEP1_0_ACK_MASK)
-			!= DIS_PROT_STEP1_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & DIS_PROT_STEP1_0_ACK_MASK) != DIS_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, DIS_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1)
-			& DIS_PROT_STEP2_0_ACK_MASK)
-			!= DIS_PROT_STEP2_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & DIS_PROT_STEP2_0_ACK_MASK) != DIS_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step3 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, DIS_PROT_STEP3_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& DIS_PROT_STEP3_0_ACK_MASK)
-			!= DIS_PROT_STEP3_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & DIS_PROT_STEP3_0_ACK_MASK) != DIS_PROT_STEP3_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step4 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, DIS_PROT_STEP4_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& DIS_PROT_STEP4_0_ACK_MASK)
-			!= DIS_PROT_STEP4_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & DIS_PROT_STEP4_0_ACK_MASK) != DIS_PROT_STEP4_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set SRAM_PDN = 1" */
 		spm_write(DIS_PWR_CON, spm_read(DIS_PWR_CON) | DIS_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until DIS_SRAM_PDN_ACK = 1" */
-		while ((spm_read(DIS_PWR_CON) & DIS_SRAM_PDN_ACK)
-			!= DIS_SRAM_PDN_ACK)
-			ram_console_update();
+		spm_wait_ack((spm_read(DIS_PWR_CON) & DIS_SRAM_PDN_ACK) != DIS_SRAM_PDN_ACK);
 		/* Need hf_fmm_ck for SRAM PDN delay IP. */
 		INCREASE_STEPS;
 #endif
@@ -1479,14 +1440,7 @@ int spm_mtcmos_ctrl_dis_pwr(int state)
 		spm_write(DIS_PWR_CON, spm_read(DIS_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & DIS_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & DIS_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & DIS_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & DIS_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off DIS" */
@@ -1537,30 +1491,20 @@ int spm_mtcmos_ctrl_mfg_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, MFG_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& MFG_PROT_STEP1_0_ACK_MASK)
-			!= MFG_PROT_STEP1_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & MFG_PROT_STEP1_0_ACK_MASK) != MFG_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, MFG_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& MFG_PROT_STEP2_0_ACK_MASK)
-			!= MFG_PROT_STEP2_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & MFG_PROT_STEP2_0_ACK_MASK) != MFG_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set SRAM_PDN = 1" */
 		spm_write(MFG_PWR_CON, spm_read(MFG_PWR_CON) | MFG_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until MFG_SRAM_PDN_ACK = 1" */
-		while ((spm_read(MFG_PWR_CON) & MFG_SRAM_PDN_ACK)
-			!= MFG_SRAM_PDN_ACK)
-			ram_console_update();
+		spm_wait_ack((spm_read(MFG_PWR_CON) & MFG_SRAM_PDN_ACK) != MFG_SRAM_PDN_ACK);
 		/* Need f_fmfg_core_ck for SRAM PDN delay IP. */
 #endif
 	} else {    /* STA_POWER_ON */
@@ -1616,14 +1560,7 @@ int spm_mtcmos_ctrl_mfg_pwr(int state)
 		spm_write(MFG_PWR_CON, spm_read(MFG_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & MFG_PWR_STA_MASK)
-			|| (spm_read(PWR_STATUS_2ND) & MFG_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & MFG_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & MFG_PWR_STA_MASK));
 #endif
 		/* TINFO="Finish to turn off MFG" */
 	} else {    /* STA_POWER_ON */
@@ -1674,29 +1611,19 @@ int spm_mtcmos_ctrl_isp_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, ISP_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1)
-			& ISP_PROT_STEP1_0_ACK_MASK)
-			!= ISP_PROT_STEP1_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & ISP_PROT_STEP1_0_ACK_MASK) != ISP_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(SMI_COMMON_SMI_CLAMP_SET, ISP_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(SMI_COMMON_SMI_CLAMP)
-			& ISP_PROT_STEP2_0_ACK_MASK)
-			!= ISP_PROT_STEP2_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(SMI_COMMON_SMI_CLAMP) & ISP_PROT_STEP2_0_ACK_MASK) != ISP_PROT_STEP2_0_ACK_MASK);
 #endif
 		/* TINFO="Set SRAM_PDN = 1" */
 		spm_write(ISP_PWR_CON, spm_read(ISP_PWR_CON) | ISP_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until ISP_SRAM_PDN_ACK = 1" */
-		while ((spm_read(ISP_PWR_CON) & ISP_SRAM_PDN_ACK)
-			!= ISP_SRAM_PDN_ACK)
-			ram_console_update();
+		spm_wait_ack((spm_read(ISP_PWR_CON) & ISP_SRAM_PDN_ACK) != ISP_SRAM_PDN_ACK);
 		/* Need hf_fmm_ck for SRAM PDN delay IP. */
 		INCREASE_STEPS;
 #endif
@@ -1755,14 +1682,7 @@ int spm_mtcmos_ctrl_isp_pwr(int state)
 		spm_write(ISP_PWR_CON, spm_read(ISP_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & ISP_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & ISP_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & ISP_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & ISP_PWR_STA_MASK));
 #endif
 		/* TINFO="Finish to turn off ISP" */
 	} else {    /* STA_POWER_ON */
@@ -1814,13 +1734,7 @@ int spm_mtcmos_ctrl_ifr_pwr(int state)
 		spm_write(IFR_PWR_CON, spm_read(IFR_PWR_CON) | IFR_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until IFR_SRAM_PDN_ACK = 1" */
-		while ((spm_read(IFR_PWR_CON) & IFR_SRAM_PDN_ACK)
-			!= IFR_SRAM_PDN_ACK) {
-			/* SRAM PDN delay IP clock is 26MHz.
-			 * Print SRAM control and ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(IFR_PWR_CON) & IFR_SRAM_PDN_ACK) != IFR_SRAM_PDN_ACK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set PWR_ISO = 1" */
@@ -1835,14 +1749,7 @@ int spm_mtcmos_ctrl_ifr_pwr(int state)
 		spm_write(IFR_PWR_CON, spm_read(IFR_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & IFR_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & IFR_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & IFR_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & IFR_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off IFR" */
@@ -1908,11 +1815,7 @@ int spm_mtcmos_ctrl_mfg_core0_pwr(int state)
 			spm_read(MFG_CORE0_PWR_CON) | MFG_CORE0_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until MFG_CORE0_SRAM_PDN_ACK = 1" */
-		while ((spm_read(MFG_CORE0_PWR_CON)
-			& MFG_CORE0_SRAM_PDN_ACK)
-			!= MFG_CORE0_SRAM_PDN_ACK) {
-			ram_console_update();/* n/a */
-		}
+		spm_wait_ack((spm_read(MFG_CORE0_PWR_CON) & MFG_CORE0_SRAM_PDN_ACK) != MFG_CORE0_SRAM_PDN_ACK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set PWR_ISO = 1" */
@@ -1932,14 +1835,7 @@ int spm_mtcmos_ctrl_mfg_core0_pwr(int state)
 			spm_read(MFG_CORE0_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & MFG_CORE0_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & MFG_CORE0_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & MFG_CORE0_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & MFG_CORE0_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off MFG_CORE0" */
@@ -2008,11 +1904,7 @@ int spm_mtcmos_ctrl_mfg_core1_pwr(int state)
 			spm_read(MFG_CORE1_PWR_CON) | MFG_CORE1_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until MFG_CORE1_SRAM_PDN_ACK = 1" */
-		while ((spm_read(MFG_CORE1_PWR_CON)
-			& MFG_CORE1_SRAM_PDN_ACK)
-			!= MFG_CORE1_SRAM_PDN_ACK) {
-			ram_console_update();/* n/a */
-		}
+		spm_wait_ack((spm_read(MFG_CORE1_PWR_CON) & MFG_CORE1_SRAM_PDN_ACK) != MFG_CORE1_SRAM_PDN_ACK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set PWR_ISO = 1" */
@@ -2032,14 +1924,7 @@ int spm_mtcmos_ctrl_mfg_core1_pwr(int state)
 			spm_read(MFG_CORE1_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & MFG_CORE1_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & MFG_CORE1_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & MFG_CORE1_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & MFG_CORE1_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off MFG_CORE1" */
@@ -2122,14 +2007,7 @@ int spm_mtcmos_ctrl_mfg_async_pwr(int state)
 			spm_read(MFG_ASYNC_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & MFG_ASYNC_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & MFG_ASYNC_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & MFG_ASYNC_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & MFG_ASYNC_PWR_STA_MASK));
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Finish to turn off MFG_ASYNC" */
@@ -2189,40 +2067,26 @@ int spm_mtcmos_ctrl_cam_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, CAM_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1)
-			& CAM_PROT_STEP1_0_ACK_MASK)
-			!= CAM_PROT_STEP1_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & CAM_PROT_STEP1_0_ACK_MASK) != CAM_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_SET, CAM_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1)
-			& CAM_PROT_STEP2_0_ACK_MASK)
-			!= CAM_PROT_STEP2_0_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1) & CAM_PROT_STEP2_0_ACK_MASK) != CAM_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 1" */
 		spm_write(SMI_COMMON_SMI_CLAMP_SET, CAM_PROT_STEP2_1_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(SMI_COMMON_SMI_CLAMP)
-			& CAM_PROT_STEP2_1_ACK_MASK)
-			!= CAM_PROT_STEP2_1_ACK_MASK) {
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(SMI_COMMON_SMI_CLAMP) & CAM_PROT_STEP2_1_ACK_MASK) != CAM_PROT_STEP2_1_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set SRAM_PDN = 1" */
 		spm_write(CAM_PWR_CON, spm_read(CAM_PWR_CON) | CAM_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until CAM_SRAM_PDN_ACK = 1" */
-		while ((spm_read(CAM_PWR_CON) & CAM_SRAM_PDN_ACK)
-			!= CAM_SRAM_PDN_ACK)
-			ram_console_update();
+		spm_wait_ack((spm_read(CAM_PWR_CON) & CAM_SRAM_PDN_ACK) != CAM_SRAM_PDN_ACK);
 #endif
 	} else {    /* STA_POWER_ON */
 		/* TINFO="Set SRAM_PDN = 0" */
@@ -2292,14 +2156,7 @@ int spm_mtcmos_ctrl_cam_pwr(int state)
 		spm_write(CAM_PWR_CON, spm_read(CAM_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & CAM_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & CAM_PWR_STA_MASK)) {
-			/* No logic between pwr_on and pwr_ack.
-			 * Print SRAM / MTCMOS control and
-			 * PWR_ACK for debug.
-			 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & CAM_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & CAM_PWR_STA_MASK));
 #endif
 		/* TINFO="Finish to turn off CAM" */
 	} else {    /* STA_POWER_ON */
@@ -2349,34 +2206,20 @@ int spm_mtcmos_ctrl_ven_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, VEN_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) &
-			VEN_PROT_STEP1_0_ACK_MASK) !=
-				VEN_PROT_STEP1_0_ACK_MASK) {
-			/* avoid warning */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & VEN_PROT_STEP1_0_ACK_MASK) != VEN_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(SMI_COMMON_SMI_CLAMP_SET, VEN_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(SMI_COMMON_SMI_CLAMP) &
-			VEN_PROT_STEP2_0_ACK_MASK) !=
-				VEN_PROT_STEP2_0_ACK_MASK) {
-			/* avoid warning */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(SMI_COMMON_SMI_CLAMP) & VEN_PROT_STEP2_0_ACK_MASK) != VEN_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set SRAM_PDN = 1" */
 		spm_write(VEN_PWR_CON, spm_read(VEN_PWR_CON) | VEN_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until VEN_SRAM_PDN_ACK = 1" */
-		while ((spm_read(VEN_PWR_CON) & VEN_SRAM_PDN_ACK)
-			!= VEN_SRAM_PDN_ACK) {
-			/* Need hf_fmm_ck for SRAM PDN delay IP. */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(VEN_PWR_CON) & VEN_SRAM_PDN_ACK) != VEN_SRAM_PDN_ACK);
 #endif
 		//////// CUT
 	} else {    /* STA_POWER_ON */
@@ -2436,13 +2279,7 @@ int spm_mtcmos_ctrl_ven_pwr(int state)
 		spm_write(VEN_PWR_CON, spm_read(VEN_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & VEN_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & VEN_PWR_STA_MASK)) {
-				/* No logic between pwr_on and pwr_ack. Print
-				 * SRAM / MTCMOS control and PWR_ACK for debug.
-				 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & VEN_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & VEN_PWR_STA_MASK));
 #endif
 		/* TINFO="Finish to turn off VEN" */
 	} else {    /* STA_POWER_ON */
@@ -2492,34 +2329,20 @@ int spm_mtcmos_ctrl_vde_bus_prot(int state)
 		/* TINFO="Set bus protect - step1 : 0" */
 		spm_write(INFRA_TOPAXI_PROTECTEN_1_SET, VDE_PROT_STEP1_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) &
-			VDE_PROT_STEP1_0_ACK_MASK) !=
-				VDE_PROT_STEP1_0_ACK_MASK) {
-			/* avoid warning */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(INFRA_TOPAXI_PROTECTEN_STA1_1) & VDE_PROT_STEP1_0_ACK_MASK) != VDE_PROT_STEP1_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set bus protect - step2 : 0" */
 		spm_write(SMI_COMMON_SMI_CLAMP_SET, VDE_PROT_STEP2_0_MASK);
 #ifndef IGNORE_MTCMOS_CHECK
-		while ((spm_read(SMI_COMMON_SMI_CLAMP) &
-			VDE_PROT_STEP2_0_ACK_MASK) !=
-				VDE_PROT_STEP2_0_ACK_MASK) {
-			/* avoid warning */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(SMI_COMMON_SMI_CLAMP) & VDE_PROT_STEP2_0_ACK_MASK) != VDE_PROT_STEP2_0_ACK_MASK);
 		INCREASE_STEPS;
 #endif
 		/* TINFO="Set SRAM_PDN = 1" */
 		spm_write(VDE_PWR_CON, spm_read(VDE_PWR_CON) | VDE_SRAM_PDN);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until VDE_SRAM_PDN_ACK = 1" */
-		while ((spm_read(VDE_PWR_CON) & VDE_SRAM_PDN_ACK) !=
-				VDE_SRAM_PDN_ACK) {
-				/* avoid warning */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(VDE_PWR_CON) & VDE_SRAM_PDN_ACK) != VDE_SRAM_PDN_ACK);
 #endif
 	} else {    /* STA_POWER_ON */
 
@@ -2577,13 +2400,7 @@ int spm_mtcmos_ctrl_vde_pwr(int state)
 		spm_write(VDE_PWR_CON, spm_read(VDE_PWR_CON) & ~PWR_ON_2ND);
 #ifndef IGNORE_MTCMOS_CHECK
 		/* TINFO="Wait until PWR_STATUS = 0 and PWR_STATUS_2ND = 0" */
-		while ((spm_read(PWR_STATUS) & VDE_PWR_STA_MASK)
-		       || (spm_read(PWR_STATUS_2ND) & VDE_PWR_STA_MASK)) {
-				/* No logic between pwr_on and pwr_ack. Print
-				 * SRAM / MTCMOS control and PWR_ACK for debug.
-				 */
-			ram_console_update();
-		}
+		spm_wait_ack((spm_read(PWR_STATUS) & VDE_PWR_STA_MASK) || (spm_read(PWR_STATUS_2ND) & VDE_PWR_STA_MASK));
 #endif
 		/* TINFO="Finish to turn off VDE" */
 	} else {    /* STA_POWER_ON */

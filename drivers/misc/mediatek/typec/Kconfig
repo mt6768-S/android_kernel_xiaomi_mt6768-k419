@@ -56,3 +56,6 @@ config OCP96011_I2C
 	  signal, analog audio, sideband use wires and analog
 	  microphone signal.
 source "drivers/misc/mediatek/typec/tcpc/Kconfig"
+
+# selene: fusb302b 4.14 agacindan tasindi
+source "drivers/misc/mediatek/typec/fusb302b/Kconfig"

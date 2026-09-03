@@ -589,6 +589,17 @@ struct ISP_BW {
 	unsigned int avg;
 };
 
+/* S-vendor (MIUI14) HAL'inin GERCEKTEN gonderdigi yapi: 3 uint = 12 bayt.
+ * Bu agacta ISP_PM_QOS_INFO_STRUCT'a sonradan port_bw[] eklenmis
+ * (yorumu: "For k510 compatible"), bu da ioctl BOYUTUNU degistirip
+ * komut numarasini kaydiriyor. Olculdu: HAL nr=41, _IOWR, 12 bayt.
+ */
+struct ISP_PM_QOS_INFO_SVND_STRUCT {
+	unsigned int bw_value;
+	unsigned int module;
+	unsigned int fps;
+};
+
 struct ISP_PM_QOS_INFO_STRUCT {
 	unsigned int       bw_value;
 	unsigned int       module;
@@ -686,8 +697,14 @@ enum ISP_CMD_ENUM {
 	ISP_CMD_SET_PM_QOS,
 	ISP_CMD_SET_PM_QOS_INFO,
 	ISP_CMD_TRANSFOR_CCU_REG,
-	ISP_CMD_SET_SEC_DAPC_REG,
-	ISP_CMD_SET_SEC_ENABLE
+	/* selene (S-vendor / MIUI14) ABI: bu ucunun SIRASI onemli.
+	 * ioctl numaralari bu enum'dan uretiliyor; VIR_CQCNT enum'un
+	 * ortasindan silinince kalan komutlar kayiyor ve HAL'in
+	 * gonderdigi ioctl'ler yanlis case'e dusuyor (cekimde cokme).
+	 */
+	ISP_CMD_SET_SEC_ENABLE,
+	ISP_CMD_SET_VIR_CQCNT,
+	ISP_CMD_SET_SEC_DAPC_REG
 };
 
 enum ISP_HALT_DMA_ENUM {
@@ -764,8 +781,9 @@ enum ISP_HALT_DMA_ENUM {
 	_IOWR(ISP_MAGIC, ISP_CMD_GET_CUR_ISP_CLOCK, struct ISP_GET_CLK_INFO)
 #define ISP_SET_PM_QOS             \
 	_IOWR(ISP_MAGIC, ISP_CMD_SET_PM_QOS, unsigned int)
+/* nr ve boyut ENUM'dan DEGIL, HAL'den olculerek sabitlendi (0xC00C6B29). */
 #define ISP_SET_PM_QOS_INFO         \
-	_IOWR(ISP_MAGIC, ISP_CMD_SET_PM_QOS_INFO, struct ISP_PM_QOS_INFO_STRUCT)
+	_IOWR(ISP_MAGIC, 41, struct ISP_PM_QOS_INFO_SVND_STRUCT)
 #define ISP_REGISTER_IRQ_USER_KEY   \
 	_IOR(ISP_MAGIC, ISP_CMD_REGISTER_IRQ_USER_KEY,\
 					   struct ISP_REGISTER_USERKEY_STRUCT)
@@ -806,6 +824,11 @@ enum ISP_HALT_DMA_ENUM {
 	_IOWR(ISP_MAGIC, ISP_CMD_TRANSFOR_CCU_REG,  unsigned char*)
 #define ISP_SET_SEC_ENABLE \
 	_IOW(ISP_MAGIC, ISP_CMD_SET_SEC_ENABLE, unsigned int)
+/* Olculdu: HAL nr=44, _IOWR, 4 bayt (0xC0046B2C). Enum'da 45'te ve
+ * makro 'unsigned int*' (8 bayt) idi -> numara tutmuyordu.
+ */
+#define ISP_SET_VIR_CQCNT \
+	_IOWR(ISP_MAGIC, 44, unsigned int)
 
 #ifdef CONFIG_COMPAT
 #define COMPAT_ISP_READ_REGISTER      \

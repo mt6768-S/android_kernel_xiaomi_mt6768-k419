@@ -703,6 +703,18 @@ static int __init upower_get_tbl_ref(void)
 				(unsigned long long)upower_data_phy_addr,
 				(unsigned long long)upower_data_virt_addr);
 
+	/* SSPM ayrilmis bellegi gelmediyse virt_addr 0 doner; asagidaki
+	 * temizleme dongusu o zaman NULL'a yaziyor ve boot'ta panik.
+	 * Tablo referansi olmadan devam etmek guvenli: upower yalnizca
+	 * EAS guc tahmini icin kullaniliyor.
+	 */
+	if (!upower_data_virt_addr || !upower_data_size) {
+		upower_error("sspm ayrilmis bellek yok (virt=0x%llx size=%d)\n",
+			(unsigned long long)upower_data_virt_addr,
+			(int)upower_data_size);
+		return 0;
+	}
+
 	/* clear */
 	ptr = (unsigned char *)(uintptr_t)upower_data_virt_addr;
 	for (i = 0; i < upower_data_size; i++)

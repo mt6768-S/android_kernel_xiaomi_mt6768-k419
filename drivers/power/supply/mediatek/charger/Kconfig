@@ -228,9 +228,10 @@ config LOAD_SWITCH_RT9750
 	  which is good for direct charge.
 	  It depends on config MTK_CHARGER.
 
-config CHARGER_MM8013
-	bool "CHARGER MM8013"
+config CHARGER_BQ2589X_CHARGER
+	bool "CHARGER_BQ2589X_CHARGER"
 	help
-	  Say Y to enable
-	  mm8013 driver.
-	  Set to Yes if MM8013 is used.
+	  This is to enable MediaTek supports to BQ2589X.
+	  It depends on config MTK_SMART_BATTERY
+	  and config MTK_SWCHR_SUPPORT
+	  Set to Yes if BQ2589X is used.

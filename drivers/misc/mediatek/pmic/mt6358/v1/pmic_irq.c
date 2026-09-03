@@ -98,6 +98,16 @@ void pmic_enable_interrupt(enum PMIC_IRQ_ENUM intNo, unsigned int en, char *str)
 			__func__, intNo);
 		return;
 	}
+	/* PMIC probe etmediyse pmic_dev NULL kalir; asagidaki uc kullanim da
+	 * (get_virq / get_name / request_irq) onu cozuyor. Fonksiyonun geri
+	 * kalani her on kosulu zaten kontrol ediyor, bu biri atlanmis.
+	 * accdet probe'u PMIC hazir olmadan kosarsa NULL deref ile panik.
+	 */
+	if (!pmic_dev) {
+		pr_notice(PMICTAG "[%s] PMIC hazir degil, intNo=%d\n",
+			__func__, intNo);
+		return;
+	}
 	irq = mt6358_irq_get_virq(pmic_dev->parent, intNo);
 	if (!irq) {
 		pr_notice(PMICTAG "[%s] fail intNo=%d\n", __func__, intNo);

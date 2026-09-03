@@ -241,7 +241,15 @@ int bdg_is_bdg_connected(void)
 #ifdef CONFIG_MTK_MT6382_BDG
 		unsigned int ret = 0;
 
-		spislv_init();
+		/* spislv_init donus degeri yok sayiliyordu: spi kole aygiti
+		 * probe etmemisse slv_data.spi NULL kalir ve asagidaki
+		 * spislv_switch_speed_hz -> spi_sync(NULL) ile boot'ta panik.
+		 * SPI uzerinden konusamiyorsak kopru zaten yok demektir.
+		 */
+		if (spislv_init()) {
+			mt6382_connected = -1;
+			return mt6382_connected;
+		}
 		spislv_switch_speed_hz(SPI_TX_LOW_SPEED_HZ, SPI_RX_LOW_SPEED_HZ);
 		ret = mtk_spi_read(0x0);
 

@@ -385,7 +385,14 @@ const struct ISR_TABLE IRQ_CB_TBL[ISP_IRQ_TYPE_AMOUNT] = {
 #else
 	{ISP_Irq_CAM_A,     0,  "cam2"},
 	{ISP_Irq_CAM_B,     0,  "cam3"},
-	{ISP_Irq_DIP_A,     0,  "dip"},
+	/* selene: DTS dugumu "dip1@15022000" -> of_node->name = "dip1".
+	 * Tabloda "dip" yaziyordu; eslestirme birebir strcmp oldugu icin
+	 * request_irq HIC cagrilmiyordu -> DIP kesmesi kayitsiz ->
+	 * CMDQ_EVENT_DIP_CQ_THREAD0_EOF hic tetiklenmiyor -> MDP isi
+	 * bekleyip SW timeout -> camerahalserver cokuyor (cekim).
+	 * Onizleme DIP kullanmadigi icin etkilenmiyordu.
+	 */
+	{ISP_Irq_DIP_A,     0,  "dip1"},
 	{ISP_Irq_CAMSV_0,   0,  "camsv1"},
 	{ISP_Irq_CAMSV_1,   0,  "camsv2"},
 	{ISP_Irq_CAMSV_2,   0,  "camsv3"},
@@ -8994,6 +9001,25 @@ static long ISP_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 		}
 		LOG_NOTICE("ISP_SET_SEC_ENABLE sec_on = %d\n", sec_on);
 		break;
+	case ISP_SET_VIR_CQCNT: {
+		/* S-vendor (MIUI14) kamera HAL'i bu ioctl'i cagiriyor.
+		 * mt6768 ISP'sinde sanal CQ sayaci donanimi YOK, o yuzden
+		 * degeri saklamiyoruz -- ama cagriyi KABUL etmek zorundayiz:
+		 * enum'dan silinince ioctl numaralari kayiyor ve HAL'in
+		 * diger komutlari yanlis case'e dusuyordu (cekimde cokme).
+		 */
+		unsigned int _cq_cnt = 0;
+
+		/* Olculdu: HAL 4 bayt gonderiyor (tek uint), 8 degil. */
+		if (copy_from_user(&_cq_cnt, (void *)Param,
+				sizeof(unsigned int)) != 0) {
+			LOG_NOTICE("ISP_SET_VIR_CQCNT from user fail\n");
+			Ret = -EFAULT;
+			break;
+		}
+		LOG_NOTICE("ISP_SET_VIR_CQCNT cnt:%d (no-op)\n", _cq_cnt);
+		break;
+	}
 	default:
 	{
 		LOG_NOTICE("Unknown Cmd(%d)\n", Cmd);

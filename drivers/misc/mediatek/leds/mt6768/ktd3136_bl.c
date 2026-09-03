@@ -1013,6 +1013,10 @@ struct device *ktd3137_device_create(void *drvdata, const char *fmt)
 	struct device *dev;
 	if (IS_ERR(ktd3137_class)) {
 		pr_err("Failed to create class %ld\n", PTR_ERR(ktd3137_class));
+		/* Donulmuyordu: device_create asagida hatali sinif isaretcisini
+		 * cozuyor. Hatayi cagirana tasi.
+		 */
+		return ERR_CAST(ktd3137_class);
 	}
 
 	dev = device_create(ktd3137_class, NULL, atomic_inc_return(&ktd_dev), drvdata, fmt);
@@ -1073,14 +1077,18 @@ static int ktd3137_probe(struct i2c_client *client,
 	ktd_hbm_mode = 0;
 
 	ktd3137_dev = ktd3137_device_create(chip, "ktd");
+	/* Hata basilip DONULMUYORDU; hemen asagidaki &ktd3137_dev->kobj
+	 * hata isaretcisini cozup boot'ta panik atiyordu. sysfs grubu
+	 * olmadan da arka isik surucusu calisir, o yuzden probe'u
+	 * dusurmek yerine yalnizca bu adimi atliyoruz.
+	 */
 	if (IS_ERR(ktd3137_dev)) {
 		dev_err(&client->dev, "failed_to create device for ktd");
-	}
-
-	err = sysfs_create_group(&ktd3137_dev->kobj, &ktd3137_bl_attr_group);
-	if (err) {
-		dev_err(&client->dev, "failed to create sysfs group\n");
-
+	} else {
+		err = sysfs_create_group(&ktd3137_dev->kobj,
+					 &ktd3137_bl_attr_group);
+		if (err)
+			dev_err(&client->dev, "failed to create sysfs group\n");
 	}
 
 	i2c_set_clientdata(client, chip);

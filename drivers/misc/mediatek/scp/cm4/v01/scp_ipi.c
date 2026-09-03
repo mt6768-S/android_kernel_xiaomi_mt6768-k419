@@ -141,6 +141,11 @@ enum scp_ipi_status scp_ipi_unregistration(enum ipi_id id)
 }
 EXPORT_SYMBOL_GPL(scp_ipi_unregistration);
 
+/* SCP ack beklemesi icin ust sinir. Saglikli donanimda ack
+ * mikrosaniyeler icinde gelir; bu sinir fazlasiyla genis.
+ */
+#define SCP_IPI_WAIT_MAX_SPINS	1000000u
+
 /*
  * API for apps to send an IPI to scp
  * @param id:   IPI ID
@@ -285,9 +290,28 @@ enum scp_ipi_status scp_ipi_send(enum ipi_id id, void *buf,
 	/* toggle the related bit to trigger an interrupt to scp */
 	writel((1<<scp_id), SCP_GIPC_IN_REG);
 
-	if (wait)
-		while ((readl(SCP_GIPC_IN_REG) & (1<<scp_id)) > 0)
-			;
+	if (wait) {
+		unsigned int spins = 0;
+
+		/* Bu dongu SINIRSIZDI: SCP takilirsa burada sonsuza kadar
+		 * donuluyor, ustelik scp_ipi_mutex TUTULURKEN -- yani diger
+		 * tum SCP kullanicilari da kilide takilip kaliyordu ve
+		 * hicbir kayit birakmiyordu. Sinirla ve hatayi bildir;
+		 * cagiranlar SCP_IPI_BUSY'yi zaten isliyor.
+		 */
+		while ((readl(SCP_GIPC_IN_REG) & (1<<scp_id)) > 0) {
+			if (++spins > SCP_IPI_WAIT_MAX_SPINS) {
+				pr_notice("[SCP] %s: id=%d ack gelmedi, vazgecildi\n",
+					  __func__, id);
+				if (scp_awake_unlock(scp_id) == -1)
+					pr_debug("[SCP] %s: awake unlock fail\n",
+						 __func__);
+				mutex_unlock(&scp_ipi_mutex[scp_id]);
+				return SCP_IPI_BUSY;
+			}
+			cpu_relax();
+		}
+	}
 	if (scp_awake_unlock(scp_id) == -1)
 		pr_debug("[SCP] %s: awake unlock fail\n", __func__);
 

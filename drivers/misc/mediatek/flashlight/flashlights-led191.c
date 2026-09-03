@@ -90,7 +90,11 @@ static int led191_pinctrl_init(struct platform_device *pdev)
 	led191_pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(led191_pinctrl)) {
 		pr_info("Failed to get flashlight pinctrl.\n");
-		ret = PTR_ERR(led191_pinctrl);
+		/* Burada DONULMUYORDU: asagidaki pinctrl_lookup_state
+		 * cagrilari hata isaretcisini cozup boot'ta panik atiyor.
+		 * Cagiran (led191_probe) donus degerini zaten kontrol ediyor.
+		 */
+		return PTR_ERR(led191_pinctrl);
 	}
 
 	/*  Flashlight pin initialization */
