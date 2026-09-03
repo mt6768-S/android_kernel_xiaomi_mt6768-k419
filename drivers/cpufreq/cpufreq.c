@@ -18,6 +18,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/cpu.h>
+#include <linux/io.h>		/* selene: memremap (OC sinyali) */
 #include <linux/cpufreq.h>
 #include <linux/cpufreq_times.h>
 #include <linux/delay.h>
@@ -729,6 +730,10 @@ static ssize_t store_##file_name					\
 	unsigned long val;						\
 	int ret;							\
 									\
+	/* selene overclock: frekans sinirlari kilitli. */             \
+	if (unlikely(selene_oc_enabled))                               \
+		return -EPERM;                                                \
+                                                                \
 	ret = sscanf(buf, "%lu", &val);					\
 	if (ret != 1)							\
 		return -EINVAL;						\
@@ -777,6 +782,10 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 {
 	char str_governor[16];
 	int ret;
+
+	/* selene overclock: governor performance modunda kilitli. */
+	if (unlikely(selene_oc_enabled))
+		return -EPERM;
 
 	ret = sscanf(buf, "%15s", str_governor);
 	if (ret != 1)
@@ -1062,6 +1071,112 @@ static int cpufreq_add_dev_interface(struct cpufreq_policy *policy)
 	return 0;
 }
 
+/*
+ * selene: overclock bayragi -- SADECE bootloader (LK) belirler.
+ *
+ * __ro_after_init: init bittikten sonra bu degisken salt-okunur sayfaya
+ * tasinir (CONFIG_STRICT_KERNEL_RWX=y bu agacta ACIK). Boylece root yetkili
+ * userspace de, kernel bellegine yazan bir modul de degeri degistiremez.
+ * Overclock yalnizca LK cmdline'a ekledigi selene.oc=1 ile acilir.
+ */
+int selene_oc_enabled __ro_after_init;
+EXPORT_SYMBOL(selene_oc_enabled);
+
+static int __init selene_oc_setup(char *str)
+{
+	selene_oc_enabled = (str && *str == 0x31);
+	pr_info("selene: overclock %s (bootloader)\n",
+		selene_oc_enabled ? "ACIK" : "kapali");
+	return 1;
+}
+__setup("selene.oc=", selene_oc_setup);
+
+/*
+ * LK -> kernel kanali: AYRILMIS DRAM KELIMESI.
+ *
+ * Cmdline yolu bu cihazda KULLANILAMADI: LK'nin cmdline tamponuna ekleme
+ * yapmak -- kernel'in tamamen yok saydigi zararsiz bir token bile olsa --
+ * kernel panigi uretiyordu (olculdu: exp_type 0x2, LK cokmesi degil).
+ *
+ * Bunun yerine bootloader tek bir 64-bit sihirli deger yaziyor. Adres,
+ * ramoops oyugunun son 64 KB'i (0x4D010000..0x4D0F0000 bolgesi kernel'e
+ * "ayrilmis" diye bildiriliyor) ve bu cihazda pstore hic kurulmadigi icin
+ * oraya baska kimse dokunmuyor.
+ *
+ * Hata modu IYI HUYLU: cop okunursa sihirli deger tutmaz, OC KAPALI sayilir
+ * ve cihaz stok hizlarda acilir. "Yanlis pozitif" ihtimali 2^64'te bir.
+ *
+ * Okuduktan sonra TEMIZLENIR: LK bir sonraki boot'ta yeniden yazmazsa
+ * (ornegin kullanici OC'yi kapattiysa) bayrak kendiliginden dusmus olur.
+ *
+ * core_initcall: MTK cpufreq surucusu module_init (6) ve late_initcall (7)
+ * seviyelerinde basliyor, biz seviye 1'iz -- OPP tablosu secilmeden once
+ * calistigimiz garanti. selene_oc_enabled __ro_after_init olsa da buraya
+ * yazmak gecerli, cunku mark_rodata_ro() tum initcall'lardan SONRA calisir.
+ */
+#define SELENE_OC_SIGNAL_ADDR	0x4D0E0000UL
+#define SELENE_OC_SIGNAL_HI	0x53454C45U	/* "SELE" */
+#define SELENE_OC_SIGNAL_LO	0x4F433031U	/* "OC01" */
+
+static int __init selene_oc_signal_read(void)
+{
+	volatile u32 *p;
+	u32 hi, lo;
+
+	p = (volatile u32 *)memremap(SELENE_OC_SIGNAL_ADDR, 8, MEMREMAP_WB);
+	if (!p) {
+		pr_info("selene: OC sinyali okunamadi (memremap basarisiz)\n");
+		return 0;
+	}
+
+	hi = p[0];
+	lo = p[1];
+
+	if (hi == SELENE_OC_SIGNAL_HI && lo == SELENE_OC_SIGNAL_LO) {
+		selene_oc_enabled = 1;
+		pr_info("selene: overclock ACIK (bootloader DRAM sinyali)\n");
+	} else {
+		pr_info("selene: overclock kapali (sinyal %08x%08x)\n", hi, lo);
+	}
+
+	p[0] = 0;
+	p[1] = 0;
+
+	memunmap((void *)p);
+	return 0;
+}
+core_initcall(selene_oc_signal_read);
+
+/*
+ * Tepe-frekans kilidi BOOT SIRASINDA DEGIL, surucler ayaga kalktiktan sonra.
+ *
+ * Ilk surumde kilit __cpufreq_driver_target icinde daima etkindi ve
+ * policy->max degerini clamp sonrasi eziyordu. Ama erken boot'ta policy->max
+ * yalnizca termal yuzunden dusuk olmaz -- regulator/EEM/PTP hazir olmadan da
+ * mesru sekilde kisitli olabilir. Onu ezmek cihazi acilista tepe OPP'ye
+ * cakiyordu ve KERNEL PANIGI ile bootloop uretiyordu (2026-09-02).
+ *
+ * Cozum: tablo bastan PRO kalir (tavan acik, governor normal sekilde kullanir),
+ * kilit ise late_initcall'da devreye girer. Kullanici acisindan sonuc ayni --
+ * cihaz yine surekli tepede calisir, termal kisma yine devre disi.
+ *
+ * __ro_after_init burada da GECERLI: mark_rodata_ro() initcall'lardan SONRA
+ * calisir, yani late_initcall bu degiskene yazabilir ve hemen ardindan sayfa
+ * salt-okunur olur. Guvenlik ozelligi korunuyor.
+ */
+int selene_oc_pinned __ro_after_init;
+EXPORT_SYMBOL(selene_oc_pinned);
+
+static int __init selene_oc_pin_activate(void)
+{
+	if (selene_oc_enabled) {
+		selene_oc_pinned = 1;
+		pr_info("selene: overclock tepe-frekans kilidi ETKIN\n");
+	}
+	return 0;
+}
+late_initcall(selene_oc_pin_activate);
+
 __weak struct cpufreq_governor *cpufreq_default_governor(void)
 {
 	return NULL;
@@ -1075,8 +1190,12 @@ static int cpufreq_init_policy(struct cpufreq_policy *policy)
 	int ret;
 
 	if (has_target()) {
+		/* selene overclock: kayitli governor ne olursa olsun performance. */
+		if (unlikely(selene_oc_enabled))
+			gov = get_governor("performance");
 		/* Update policy governor to the one used before hotplug. */
-		gov = get_governor(policy->last_governor);
+		if (!gov)
+			gov = get_governor(policy->last_governor);
 		if (gov) {
 			pr_debug("Restoring governor %s for cpu %d\n",
 				 policy->governor->name, policy->cpu);
@@ -2170,6 +2289,18 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 
 	/* Make sure that target_freq is within supported range */
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
+
+	/*
+	 * selene overclock: CPU tepe OPP degerinde KILITLI.
+	 * Bilerek clamp sonrasi: termal sogutma cihazlari ve userspace
+	 * policy->max degerini freq_qos uzerinden dusurse bile burada geri
+	 * alinir. Acil kapanma ETKILENMEZ -- mtk_cooler_kshutdown dogrudan
+	 * machine_power_off() cagiriyor, cpufreq yolunu hic kullanmiyor.
+	 */
+	if (unlikely(selene_oc_pinned)) {
+		target_freq = policy->cpuinfo.max_freq;
+		relation = CPUFREQ_RELATION_H;
+	}
 
 	pr_debug("target for CPU %u: %u kHz, relation %u, requested %u kHz\n",
 		 policy->cpu, target_freq, relation, old_target_freq);

@@ -59,6 +59,29 @@
 #include <linux/nvmem-consumer.h>
 #endif
 
+
+/* selene: overclock bayragi (drivers/cpufreq/cpufreq.c, __ro_after_init).
+ * Bootloader DRAM sinyaliyle geliyor; ayrintisi cpufreq.c icinde. */
+extern int selene_oc_enabled;
+
+/*
+ * selene GPU overclock -- OPP indeksi (KUCUK indeks = YUKSEK frekans).
+ *
+ * Bu cipin segmenti idx 7 (823 MHz) ile kelepceli, ama satici ayni SoC
+ * ailesinin baska binleri icin daha yuksek indeksleri zaten dogrulamis:
+ * MT6769T -> idx 2 (950 MHz), MT6769Z -> idx 0 (1000 MHz). Yani frekans
+ * da voltaj da UYDURMA DEGIL, tablodan geliyor; VGPU_MAX_VOLT (950 mV)
+ * tepe OPP voltajini zaten kapsiyor.
+ *
+ * Kademeli: once 2 (950 MHz, ~+%15 frekans / ~+%48 guc). Isi uygunsa
+ * 0 (1000 MHz) denenebilir. GPU termal kismasi BILEREK acik birakildi.
+ *
+ * NOT: agacta bu dosyanin IKI kopyasi var; derlenen BUDUR
+ * (drivers/gpu/mediatek/...). drivers/misc/mediatek/base/power/mt6768/
+ * altindaki kopya derlenmiyor -- once yanlislikla o yamalanmisti.
+ */
+#define SELENE_OC_GPU_MAX_IDX	2	/* 950 MHz; 0 = 1000 MHz */
+
 #define DRV_Reg32(addr) readl(addr)
 #define DRV_WriteReg32(addr, val) writel(val, addr)
 /**
@@ -2591,6 +2614,18 @@ static void __mt_gpufreq_setup_opp_table(struct g_opp_table_info *freqs, int num
 		g_segment_max_opp_idx = 0;
 	else
 		g_segment_max_opp_idx = 7;
+
+	/*
+	 * selene overclock: segment kelepcesini gevset.
+	 * Bilerek BURADA -- asagidaki g_max_limited_idx ve
+	 * g_DVFS_off_by_ptpod_idx bu degerden turetiliyor, boylece
+	 * kendiliginden tutarli kaliyorlar.
+	 */
+	if (selene_oc_enabled) {
+		g_segment_max_opp_idx = SELENE_OC_GPU_MAX_IDX;
+		gpufreq_pr_info("@%s: selene: overclock ACIK -> GPU max opp idx = %u\n",
+				__func__, g_segment_max_opp_idx);
+	}
 
 	g_segment_min_opp_idx = 31;
 

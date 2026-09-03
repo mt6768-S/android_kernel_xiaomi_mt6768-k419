@@ -20,6 +20,10 @@
 #include "../../mtk_cpufreq_hybrid.h"
 #include "mtk_devinfo.h"
 
+/* selene: overclock bayragi (drivers/cpufreq/cpufreq.c, __ro_after_init).
+ * Bu dosya <linux/cpufreq.h> dahil etmiyor, o yuzden burada bildiriliyor. */
+extern int selene_oc_enabled;
+
 static struct regulator *regulator_proc11;
 static struct regulator *regulator_proc12;
 static struct regulator *regulator_sram11;
@@ -610,6 +614,47 @@ unsigned int _mt_cpufreq_get_cpu_level(void)
 
 	tag_pr_info("%d %d, %d, (%d, %d)\n",
 		val, lv, turbo_flag, UP_SRATE, DOWN_SRATE);
+
+	/*
+	 * selene overclock: LK cmdline uzerinden acmissa, efuse segmentinin
+	 * sectigi bin yerine PRO tablosuna geciyoruz.
+	 *   stok G75 : LL 1800 MHz / 1006.25 mV, L 2000 MHz / 1087.50 mV
+	 *   PRO      : LL 2000 MHz / 1081.25 mV, L 2202 MHz / 1118.75 mV
+	 * Tepe voltaj 111875 < MAX_VPROC_VOLT (112000): kirpilmiyor ve PMIC
+	 * adimina (625 uV) tam oturuyor. PRO / PRO_v7 ayriminda saticinin
+	 * kendi ptp kurali birebir tekrarlanir. Frekans/voltaj, PLL method ve
+	 * PV tablolari ayni seviye indeksinden turedigi icin tek noktadan
+	 * degistirmek hepsini tutarli tutar.
+	 */
+	/*
+	 * CPU OPP tablosu DEGISTIRILMIYOR -- devre disi birakildi (2026-09-03).
+	 *
+	 * NEDEN (olcumle bulundu, tahmin degil): bu cihazda CPU DVFS'i AP degil
+	 * SSPM yardimci islemcisi yapiyor (CONFIG_MTK_TINYSYS_SSPM_SUPPORT=y,
+	 * SSPM_VERSION="v1"). SSPM kendi OPP tablolarini firmware blob'unda
+	 * tutuyor ve segmenti EFUSE'dan KENDI cikariyor -- AP'nin gonderdigi
+	 * seg code'u dikkate almiyor (denendi: mtk_cpufreq_hybrid.c uzerinden
+	 * "seg code = 2" gonderildi, gercek frekans DEGISMEDI).
+	 *
+	 * AP tarafinda tabloyu PRO'ya cevirmek yalnizca TUTARSIZLIK yaratiyor:
+	 * ARMPLL 2000 MHz'e dogru kilitleniyor (DDS dogru) ama post-divider
+	 * SSPM'in stok tablosundan gelip ÷2'de kaliyor -> CPU 999.5 MHz'de
+	 * calisiyor, yani stok 1800'un bile ALTINDA. AnTuTu'da CPU skoru
+	 * 101651 -> 59205 (-%42) dusmesinin sebebi tam olarak buydu.
+	 *
+	 * Kalan OC bilesenleri ETKISINI SURDURUYOR ve olculdu:
+	 *   - governor performance'a kilitli (root ile bile degistirilemiyor)
+	 *   - cpufreq termal kismasi etkisiz (150 sn yukte frekans dusmedi)
+	 *   - GPU 823 -> 950 MHz (AnTuTu GPU +%17,5)
+	 *
+	 * CPU frekansini gercekten yukseltmek icin SSPM'i devreden cikarmak
+	 * (CONFIG_HYBRID_CPU_DVFS kapatip DVFS sahipligini AP'ye almak)
+	 * gerekiyor; ayri ve riskli bir is.
+	 */
+	if (0 && selene_oc_enabled) {
+		lv = (ptp_val <= 0x10) ? CPU_LEVEL_5 : CPU_LEVEL_2;
+		tag_pr_info("selene: overclock ACIK -> CPU_LEVEL_%d (PRO)\n", lv);
+	}
 
 	return lv;
 }

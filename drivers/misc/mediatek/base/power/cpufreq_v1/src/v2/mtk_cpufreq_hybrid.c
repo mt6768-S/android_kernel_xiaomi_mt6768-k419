@@ -69,6 +69,9 @@
 #include "mtk_cpufreq_hybrid.h"
 #include "mtk_cpufreq_opp_pv_table.h"
 #include "mtk_cpufreq_debug.h"
+
+/* selene: overclock bayragi (drivers/cpufreq/cpufreq.c, __ro_after_init). */
+extern int selene_oc_enabled;
 #ifdef DSU_DVFS_ENABLE
 #include "swpm_v1/mtk_swpm_interface.h"
 #endif
@@ -1160,6 +1163,27 @@ int cpuhvfs_set_init_sta(void)
 	dvfs_to_mcupm_command(IPI_DVFS_INIT, &cdvfs_d);
 	complete_all(&cpuhvfs_setup_done);
 #elif defined(CONFIG_MTK_TINYSYS_SSPM_SUPPORT) && defined(USE_SSPM_VER_V1)
+	/*
+	 * selene overclock: SEGMENT KODUNU SSPM'e BILDIR.
+	 *
+	 * Kok neden (2026-09-03, olcumle bulundu): DVFS'i fiilen SSPM yapiyor.
+	 * Yukaridaki MCUPM/SSPM-v2 dalinda seviye SSPM'e gonderiliyor, ama bu
+	 * cihaz SSPM v1 dalina dusuyor ve orada arg[0] SABIT 0 kaliyordu.
+	 * Yani AP tarafinda OPP tablosunu PRO'ya cevirmemiz SSPM'e hic
+	 * ulasmiyordu: SSPM stok (6768) tablosunu kullanmaya devam ediyordu.
+	 *
+	 * Sonucu olculdu: opp_tbl_method_LL_6768[0] = FP(2,1), yani pos_div 2.
+	 * ARMPLL 2000 MHz'e dogru kilitleniyordu (DDS dogruydu) ama post-divider
+	 * ÷2'de kaliyordu -> CPU 2000 degil 999.5 MHz'de calisiyordu; stok
+	 * 1800'un bile ALTINDA. AnTuTu'daki %42 CPU kaybinin sebebi buydu.
+	 *
+	 * OC KAPALIYKEN davranis birebir ayni: arg[0] yine 0 gider.
+	 */
+	if (selene_oc_enabled) {
+		cdvfs_d.u.set_fv.arg[0] = _mt_cpufreq_get_cpu_level();
+		tag_pr_info("selene: SSPM seg code = %u (overclock)\n",
+			cdvfs_d.u.set_fv.arg[0]);
+	}
 	dvfs_to_spm2_command(IPI_DVFS_INIT, &cdvfs_d);
 #else
 #endif

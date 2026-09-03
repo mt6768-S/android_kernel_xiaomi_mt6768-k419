@@ -876,14 +876,28 @@ struct opp_tbl_info opp_tbls[NR_MT_CPU_DVFS][NUM_CPU_LEVEL] = {
 				ARRAY_SIZE(opp_tbl_CCI_e0_0) },
 		[CPU_LEVEL_1] = { opp_tbl_CCI_e1_0,
 				ARRAY_SIZE(opp_tbl_CCI_e1_0) },
-		[CPU_LEVEL_2] = { opp_tbl_CCI_e2_0,
-				ARRAY_SIZE(opp_tbl_CCI_e2_0) },
+		/*
+		 * selene overclock: PRO seviyelerinde CCI STOK (G75) kalir.
+		 *
+		 * PRO tablosu CCI'yi 1277 -> 1396 MHz'e cikariyor. CCI tutarli
+		 * fabric'i, L3'u ve bellek yolunu besliyor; cekirdeklerden cok
+		 * daha az toleransli. Cekirdekleri PRO'ya alip CCI'yi stokta
+		 * birakmak, kazanci (2000/2202 MHz) korurken en kirilgan parcayi
+		 * yerinde tutuyor.
+		 *
+		 * Satici bu cihazda PRO seviyelerini (2 ve 5) HIC kullanmiyor --
+		 * _mt_cpufreq_get_cpu_level() efuse'a gore yalnizca 0/1/3/4/6
+		 * donduruyor. Yani bu girdileri degistirmek stok davranisi
+		 * etkilemez, sadece bizim OC yolumuzu etkiler.
+		 */
+		[CPU_LEVEL_2] = { opp_tbl_CCI_e6_0,
+				ARRAY_SIZE(opp_tbl_CCI_e6_0) },
 		[CPU_LEVEL_3] = { opp_tbl_CCI_e3_0,
 				ARRAY_SIZE(opp_tbl_CCI_e3_0) },
 		[CPU_LEVEL_4] = { opp_tbl_CCI_e4_0,
 				ARRAY_SIZE(opp_tbl_CCI_e4_0) },
-		[CPU_LEVEL_5] = { opp_tbl_CCI_e5_0,
-				ARRAY_SIZE(opp_tbl_CCI_e5_0) },
+		[CPU_LEVEL_5] = { opp_tbl_CCI_e6_0,
+				ARRAY_SIZE(opp_tbl_CCI_e6_0) },
 		[CPU_LEVEL_6] = { opp_tbl_CCI_e6_0,
 				ARRAY_SIZE(opp_tbl_CCI_e6_0) },
 	},
@@ -1158,10 +1172,10 @@ struct opp_tbl_m_info opp_tbls_m[NR_MT_CPU_DVFS][NUM_CPU_LEVEL] = {
 	{
 		[CPU_LEVEL_0] = { opp_tbl_method_CCI_6768 },
 		[CPU_LEVEL_1] = { opp_tbl_method_CCI_6767 },
-		[CPU_LEVEL_2] = { opp_tbl_method_CCI_PRO },
+		[CPU_LEVEL_2] = { opp_tbl_method_CCI_G75 },
 		[CPU_LEVEL_3] = { opp_tbl_method_CCI_6768 },
 		[CPU_LEVEL_4] = { opp_tbl_method_CCI_6767 },
-		[CPU_LEVEL_5] = { opp_tbl_method_CCI_PRO },
+		[CPU_LEVEL_5] = { opp_tbl_method_CCI_G75 },
 		[CPU_LEVEL_6] = { opp_tbl_method_CCI_G75 },
 	},
 };

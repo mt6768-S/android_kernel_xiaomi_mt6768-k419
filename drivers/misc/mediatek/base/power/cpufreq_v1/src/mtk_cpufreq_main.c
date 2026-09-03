@@ -1214,6 +1214,10 @@ static int _mt_cpufreq_init(struct cpufreq_policy *policy)
 
 		opp_tbl_info = &opp_tbls[id][lv];
 
+		/* selene-olcum B: genel cpufreq katmaninin tablosu */
+		tag_pr_info("selene-olcum B: policy id=%d lv=%u tepe=%u\n",
+			id, lv, opp_tbl_info->opp_tbl[0].cpufreq_khz);
+
 		p->cpu_level = lv;
 
 		ret = _mt_cpufreq_setup_freqs_table(policy,
@@ -1748,6 +1752,10 @@ static int __init _mt_cpufreq_tbl_init(void)
 			p->opp_tbl = opp_tbl_info->opp_tbl;
 			p->nr_opp_tbl = opp_tbl_info->size;
 			p->freq_tbl_for_cpufreq = table;
+
+			/* selene-olcum A: surucunun kendi tablosu */
+			tag_pr_info("selene-olcum A: tbl_init id=%d lv=%u tepe=%u\n",
+				j, lv, opp_tbl_info->opp_tbl[0].cpufreq_khz);
 		}
 	}
 	return 0;

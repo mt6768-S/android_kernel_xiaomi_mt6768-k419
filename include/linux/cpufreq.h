@@ -20,6 +20,11 @@
 #include <linux/spinlock.h>
 #include <linux/sysfs.h>
 
+/* selene: bootloader (LK) tarafindan belirlenen overclock bayragi.
+ * Tanim drivers/cpufreq/cpufreq.c icinde, __ro_after_init. */
+extern int selene_oc_enabled;
+extern int selene_oc_pinned;
+
 /*********************************************************************
  *                        CPUFREQ INTERFACE                          *
  *********************************************************************/

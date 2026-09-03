@@ -760,10 +760,10 @@ static unsigned char CCI_G75Tbl[NR_FREQ * NR_CCI_TBL][NR_FREQ] = {
 unsigned char *xrecord_CCI_Tbl[NUM_CPU_LEVEL] = {
 	[CPU_LEVEL_0] = &CCI_6768Tbl[0][0],
 	[CPU_LEVEL_1] = &CCI_6767Tbl[0][0],
-	[CPU_LEVEL_2] = &CCI_proTbl[0][0],
+	[CPU_LEVEL_2] = &CCI_G75Tbl[0][0],	/* selene overclock: CCI stok */
 	[CPU_LEVEL_3] = &CCI_6768Tbl_v7[0][0],
 	[CPU_LEVEL_4] = &CCI_6767Tbl_v7[0][0],
-	[CPU_LEVEL_5] = &CCI_proTbl_v7[0][0],
+	[CPU_LEVEL_5] = &CCI_G75Tbl[0][0],	/* selene overclock: CCI stok */
 	[CPU_LEVEL_6] = &CCI_G75Tbl[0][0],
 };
 #endif

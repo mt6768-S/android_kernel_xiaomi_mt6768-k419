@@ -8,6 +8,7 @@
 #include "mtk_cpufreq_platform.h"
 #include <trace/events/power.h>
 
+
 //#ifdef CONFIG_MTK_CM_MGR_LEGACY
 cpuFreqsampler_func g_pCpuFreqSampler_func_cpi;
 /* cpu governor freq sampler */
