@@ -1025,6 +1025,83 @@ static enum mt_cpu_dvfs_id _get_cpu_dvfs_id(unsigned int cpu_id)
 	return cluster_id;
 }
 
+
+/*
+ * selene: overclock -- tepe OPP'yi saticinin KENDI ust bin degerlerine cikar.
+ *
+ * Butun sayilar uydurma degil, bu yonga icin MediaTek'in mtk_cpufreq_opp_table.h
+ * icinde sevk ettigi tablolardan:
+ *   L  (A75): PRO bini  2202 MHz @ 111875 (10uV)  -- opp_tbl_method_L_PRO[0]  = FP(1,1)
+ *   LL (A55): PRO bini  2000 MHz @ 108125 (10uV)  -- opp_tbl_method_LL_PRO[0] = FP(1,1)
+ *
+ * DUZELTME (2026-09-04, selene-bench ile olculdu): LL onceden 1800 MHz @ 100625
+ * yaziyordu; bu CPU_DVFS_FREQ0_LL_G75/VOLT0_VPROC1_G75 ile BIREBIR AYNI, yani
+ * bu cihazda hicbir sey degistirmeyen OLU KODDU. Cihazin bini G75 (CPU_LEVEL_6)
+ * ve stok tepesi zaten LL 1800 / L 2000 MHz:
+ *     sysfs OPP listesi : LL 1800, L 2000
+ *     selene-bench      : LL 1793.54 MHz, L 1996.52 MHz  (sapma %0.4)
+ * Dogru OC hedefi satiicinin PRO binidir: LL 2000 @ 108125, L 2202 @ 111875.
+ * Beklenen kazanc: LL (6 cekirdek) +%11.1, L (2 cekirdek) +%10.1.
+ *
+ * pos_div'i 1'e cekmek ZORUNLU: VCO = khz * pos_div * clk_div. LL stokta
+ * FP(2,1) kullaniyor (1700 MHz -> 3400 MHz VCO); 1800'u FP(2,1) ile istersek
+ * VCO 3600 MHz olur. Saticinin kendisi de 1800 ve 2000 MHz'de pos_div'i 1'e
+ * dusuruyor -- PRO tablosunda LL 2000 MHz FP(1,1), cunku FP(2,1) 4000 MHz VCO
+ * demek olurdu.
+ *
+ * Tepe voltaj 111875 < MAX_VPROC_VOLT (112000) ve PMIC'in 625 uV adimina tam
+ * oturuyor. Vsram = Vproc + NORMAL_DIFF_VRSAM_VPROC hesabi MAX_VSRAM_VOLT'ta
+ * zaten kirpiliyor (bkz. bu dosyadaki cur_vsram/next_vsram kontrolleri).
+ *
+ * Butun CPU_LEVEL'i PRO'ya cevirmek yerine sadece [0] girisi eziliyor: boylece
+ * alt OPP'ler kendi binimizin EEM/PTPOD kalibrasyonunda kaliyor.
+ *
+ * Islev idempotent (khz >= hedef ise dokunmuyor), cunku iki ayri yerden
+ * cagriliyor: cpufreq policy kurulumu ve EEM tablo hazirligi.
+ */
+extern int selene_oc_enabled;
+
+#define SELENE_OC_L_KHZ		2202000
+#define SELENE_OC_L_VOLT	 111875
+#define SELENE_OC_LL_KHZ	2000000
+#define SELENE_OC_LL_VOLT	 108125
+
+static void selene_oc_patch_top_opp(enum mt_cpu_dvfs_id id, unsigned int lv)
+{
+	struct mt_cpu_freq_info *t;
+	struct mt_cpu_freq_method *m;
+	unsigned int khz, volt;
+
+	if (!selene_oc_enabled)
+		return;
+
+	if (id == MT_CPU_DVFS_L) {
+		khz = SELENE_OC_L_KHZ;
+		volt = SELENE_OC_L_VOLT;
+	} else if (id == MT_CPU_DVFS_LL) {
+		khz = SELENE_OC_LL_KHZ;
+		volt = SELENE_OC_LL_VOLT;
+	} else {
+		return;		/* CCI'ya dokunma */
+	}
+
+	t = opp_tbls[id][lv].opp_tbl;
+	m = opp_tbls_m[id][lv].opp_tbl_m;
+	if (!t || !m)
+		return;
+
+	if (t[0].cpufreq_khz >= khz)
+		return;		/* zaten esit ya da ustu bir bin */
+
+	m[0].pos_div = 1;
+	m[0].clk_div = 1;
+	t[0].cpufreq_khz = khz;
+	t[0].cpufreq_volt = volt;
+
+	tag_pr_info("selene: OC -> %s OPP0 = %u kHz @ %u (VCO %u MHz)\n",
+		(id == MT_CPU_DVFS_L) ? "L" : "LL", khz, volt, khz / 1000);
+}
+
 static int _mt_cpufreq_setup_freqs_table(struct cpufreq_policy *policy,
 	struct mt_cpu_freq_info *freqs, int num)
 {
@@ -1221,6 +1298,7 @@ static int _mt_cpufreq_init(struct cpufreq_policy *policy)
 		cpufreq_ver("DVFS: @%s: %s(cpu_id = %d)\n",
 			__func__, cpu_dvfs_get_name(p), p->cpu_id);
 
+		selene_oc_patch_top_opp(id, lv);
 		opp_tbl_info = &opp_tbls[id][lv];
 #ifdef ENABLE_DOE
 		modify_kernel_opp_table_by_doe(opp_tbl_info->opp_tbl, p, id);
@@ -1289,7 +1367,12 @@ static int _mt_cpufreq_init(struct cpufreq_policy *policy)
 #endif
 		cpufreq_unlock(flags);
 	}
-#ifdef ENABLE_DOE
+#if defined(ENABLE_DOE) && defined(CONFIG_HYBRID_CPU_DVFS)
+	/* srate_doe() mtk_cpufreq_hybrid.c icinde CONFIG_HYBRID_CPU_DVFS
+	 * blogunun ICINDE tanimli; DVFS AP tarafina alininca tanim hic
+	 * derlenmiyor ve bagla "undefined symbol: srate_doe" veriyordu.
+	 * ENABLE_DOE mt6768 platform.h icinde SSPM dalinin DISINDA oldugu
+	 * icin tek basina yetmiyor. */
 	srate_doe();
 #endif
 
@@ -1752,6 +1835,7 @@ static int __init _mt_cpufreq_tbl_init(void)
 
 	/* Prepare OPP table for EEM */
 	for_each_cpu_dvfs(j, p) {
+		selene_oc_patch_top_opp(j, lv);
 		opp_tbl_info = &opp_tbls[j][lv];
 #ifdef ENABLE_DOE
 		modify_kernel_opp_table_by_doe(opp_tbl_info->opp_tbl, p, j);

@@ -11,7 +11,28 @@
 #define CPU_DVFS_DT_REG 1
 
 #ifdef CONFIG_MTK_TINYSYS_SSPM_SUPPORT
-#define CONFIG_HYBRID_CPU_DVFS	1
+/*
+ * selene: CPU DVFS sahipligi AP'ye alindi -- CONFIG_HYBRID_CPU_DVFS BILEREK
+ * kapali.
+ *
+ * Bu sembol Kconfig'de degil, tam burada duz bir #define olarak tanimliydi;
+ * defconfig'de aramak yaniltiyor. Acikken v2/mtk_cpufreq_main.c'deki frekans
+ * yazma yolu _cpufreq_set_locked_secure() -> cpuhvfs_set_dvfs() -> SSPM'e IPI
+ * seklinde derleniyor ve AP ARMPLL'e HIC dokunmuyor; olculdu: main.o icinde
+ * cpuhvfs_* sembolleri tanimsiz referans olarak var, armpll/dds ise yok.
+ * Bu yuzden OPP tablosunu degistirmek hicbir ise yaramiyordu -- tabloyu SSPM
+ * firmware'i kendi efuse segmentinden kuruyor.
+ *
+ * Kapali oldugunda _cpufreq_set_locked() derleniyor: frekansi ve voltaji
+ * cekirdek kendisi yaziyor, dolayisiyla tepe OPP'yi yukseltmek gercekten
+ * etki ediyor. Ayni #else dali SUPPORT_VOLT_HW_AUTO_TRACK'i aciyor, yani
+ * Vsram takibini PMIC donanimi ustleniyor (saticinin kendi eslestirmesi).
+ *
+ * SSPM'in kendisi ACIK kaliyor (termal, guc vb. onu kullaniyor); yalnizca
+ * CPU DVFS ondan alindi. cpuhvfs_module_init() artik hic cagrilmiyor.
+ */
+/* #define CONFIG_HYBRID_CPU_DVFS	1 */
+#define SUPPORT_VOLT_HW_AUTO_TRACK 1
 /* #define PPM_AP_SIDE	1 */
 #define EEM_AP_SIDE	1
 #define CCI_MAP_TBL_SUPPORT	1
