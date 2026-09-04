@@ -1040,14 +1040,13 @@ static enum mt_cpu_dvfs_id _get_cpu_dvfs_id(unsigned int cpu_id)
  * ve stok tepesi zaten LL 1800 / L 2000 MHz:
  *     sysfs OPP listesi : LL 1800, L 2000
  *     selene-bench      : LL 1793.54 MHz, L 1996.52 MHz  (sapma %0.4)
- * Dogru OC hedefi satiicinin PRO binidir: LL 2000 @ 108125, L 2202 @ 111875.
+ * Dogru OC hedefi saticinin PRO binidir: LL 2000 @ 108125, L 2202 @ 111875.
  * Beklenen kazanc: LL (6 cekirdek) +%11.1, L (2 cekirdek) +%10.1.
  *
- * pos_div'i 1'e cekmek ZORUNLU: VCO = khz * pos_div * clk_div. LL stokta
- * FP(2,1) kullaniyor (1700 MHz -> 3400 MHz VCO); 1800'u FP(2,1) ile istersek
- * VCO 3600 MHz olur. Saticinin kendisi de 1800 ve 2000 MHz'de pos_div'i 1'e
- * dusuruyor -- PRO tablosunda LL 2000 MHz FP(1,1), cunku FP(2,1) 4000 MHz VCO
- * demek olurdu.
+ * pos_div = 1 ZORUNLU: VCO = khz * pos_div * clk_div. 2000 MHz'i FP(2,1) ile
+ * istemek 4000 MHz VCO demek olurdu; satici da bu yuzden PRO tablosunda
+ * LL 2000 MHz icin FP(1,1) kullaniyor. Alt OPP'lerde FP(2,1) normaldir
+ * (opp_tbl_method_LL_G75[0] = FP(1,1) ama [1] = FP(2,1)), tepe girisi degil.
  *
  * Tepe voltaj 111875 < MAX_VPROC_VOLT (112000) ve PMIC'in 625 uV adimina tam
  * oturuyor. Vsram = Vproc + NORMAL_DIFF_VRSAM_VPROC hesabi MAX_VSRAM_VOLT'ta
