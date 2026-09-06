@@ -2451,6 +2451,34 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
 	}
 #endif
 
+	/*
+	 * selene 2026-09-06: HICBIR ALGORITMA ESLESMEZSE SESSIZCE DEVAM ETME.
+	 *
+	 * Olculdu: stok dtbo overlay'i charger/algorithm_name'i
+	 * "DualSwitchCharging" yapiyor (MIUI 4.14'te CONFIG_MTK_DUAL_CHARGER_SUPPORT
+	 * acik oldugu icin orada calisiyor). Bizim 4.19'da o config kapali,
+	 * mtk_dual_switch_charging.o hic derlenmiyor ve yukaridaki blok
+	 * on-islemci tarafindan siliniyor. Kaynak DTS'imiz "SwitchCharging"
+	 * dese de canli device-tree overlay'den geliyor:
+	 *   /sys/firmware/devicetree/base/charger/algorithm_name = DualSwitchCharging
+	 *
+	 * Sonuc: hicbir strcmp tutmuyor, hicbir *_init cagrilmiyor ve
+	 * do_algorithm / plug_in / change_current_setting NULL kaliyor.
+	 * Sarj thread'i 10 sn'de bir uyaniyor ama yapacak isi yok; ICHG
+	 * register'i bq2589x'in init degerinde donuyor (olculdu: 0x07 = 448 mA,
+	 * adaptorden bagimsiz). JEITA 2944 mA hesapliyor, tip dogru tespit
+	 * ediliyor, ama hicbiri surucuye yazilmiyor -- charger_dev_set_charging_current()
+	 * bir kez bile cagrilmiyor (bq2589x_set_ichg'in pr_info'su hic basilmadi).
+	 *
+	 * selene tek sarj cihazli (DTS'te secondary_chg yorum satirinda), yani
+	 * SwitchCharging dogru algoritma. Ayni SoC'lu lancelot da onu kullaniyor.
+	 */
+	if (info->do_algorithm == NULL) {
+		chr_err("selene: '%s' algoritmasi bu kernelde derlenmemis -- SwitchCharging'e dusuluyor\n",
+			info->algorithm_name);
+		mtk_switch_charging_init(info);
+	}
+
 	info->disable_charger = of_property_read_bool(np, "disable_charger");
 	info->enable_sw_safety_timer =
 			of_property_read_bool(np, "enable_sw_safety_timer");

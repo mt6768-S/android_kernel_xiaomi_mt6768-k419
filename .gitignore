@@ -131,3 +131,11 @@ all.config
 
 # Kdevelop4
 *.kdev4
+*.oncesi
+*.oncesi2
+*-oncesi
+*.bak
+*.yedek
+
+# derleme ciktisi -- asla commitlenmez
+out/

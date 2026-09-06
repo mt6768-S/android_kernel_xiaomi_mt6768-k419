@@ -907,6 +907,33 @@ static int bq2589x_get_charger_type(struct bq2589x *bq, enum charger_type *type)
 		break;
 	case BQ2589X_VBUS_TYPE_HVDCP:
 		hvdcp_type_tmp = HVDCP;
+		/*
+		 * selene 2026-09-05: chg_type ATAMASI EKSIKTI.
+		 *
+		 * Bu switch'teki her dal chg_type'i atiyor; yalnizca HVDCP dali
+		 * atlamisti ve chg_type baslangic degeri CHARGER_UNKNOWN'da
+		 * kaliyordu. Sonuc zinciri (cihazda olculdu):
+		 *
+		 *   REG0B VBUS_STAT=100b (HVDCP), PG_STAT=1, CHRG_STAT=10b
+		 *   -> chg_type = CHARGER_UNKNOWN
+		 *   -> mt_chg_type_det.c: ONLINE property 0 dondurur
+		 *      ("if (chg_type != CHARGER_UNKNOWN) val->intval = 1")
+		 *   -> usb/online=0, charger/online=0, battery/status=Discharging
+		 *
+		 * yani DONANIM fast charge yaparken (kapasite 87->88, gerilim
+		 * 4318->4322 mV olculdu) Android "sarj olmuyor" gosteriyordu.
+		 *
+		 * Yalnizca HVDCP/QC sinifi adaptorlerde goruluyor; duz DCP
+		 * adaptor VBUS_TYPE_DCP dalina dusup STANDARD_CHARGER atiyor.
+		 * Bazi kullanicilarda olup bazilarinda olmamasinin sebebi bu.
+		 *
+		 * STANDARD_CHARGER (=4) seciliyor: smblib_apsd_results[4] =
+		 * POWER_SUPPLY_TYPE_USB_DCP, yani duvar sarj cihazi. Dizide
+		 * index 9 = USB_HVDCP var ama enum charger_type'ta karsiligi
+		 * dogrulanamadi; mevcut ve guvenli degeri kullaniyoruz.
+		 * Sarj akimi/limit mantigina DOKUNULMUYOR.
+		 */
+		chg_type = STANDARD_CHARGER;
 		break;
 	case BQ2589X_VBUS_TYPE_UNKNOWN:
 		chg_type = NONSTANDARD_CHARGER;

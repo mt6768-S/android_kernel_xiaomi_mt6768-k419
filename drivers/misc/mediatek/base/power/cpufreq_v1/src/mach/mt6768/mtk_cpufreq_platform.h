@@ -31,7 +31,22 @@
  * SSPM'in kendisi ACIK kaliyor (termal, guc vb. onu kullaniyor); yalnizca
  * CPU DVFS ondan alindi. cpuhvfs_module_init() artik hic cagrilmiyor.
  */
-/* #define CONFIG_HYBRID_CPU_DVFS	1 */
+/*
+ * 2026-09-05 HOTFIX: AP-DVFS devri GERI ALINDI.
+ *
+ * 2026.9.4'te bu tanim kapatilip DVFS sahipligi AP'ye alinmisti. Cihazda
+ * olculdu: performance governor'da bile L kumesi OPP index 12'de (1087 MHz)
+ * park ediyor, tepe 2000 MHz'e hic cikmiyor -- termal degil (tum cooling
+ * device cur_state=0). 2026.8.30 ayni testte 1996 MHz veriyordu.
+ *
+ * Bu bir REGRESYON ve sebebi bulunana kadar acilmamali. Hotfix surumu
+ * (2026.9.5) yalnizca HVDCP sarj duzeltmesini tasiyor; CPU DVFS davranisi
+ * 2026.9.3 ile ayni.
+ *
+ * selene_oc_patch_top_opp() agacta duruyor ama SSPM sahipligi geri geldigi
+ * icin etkisiz -- 2026.9.3'teki durumun aynisi.
+ */
+#define CONFIG_HYBRID_CPU_DVFS	1
 #define SUPPORT_VOLT_HW_AUTO_TRACK 1
 /* #define PPM_AP_SIDE	1 */
 #define EEM_AP_SIDE	1
