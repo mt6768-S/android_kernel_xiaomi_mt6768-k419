@@ -175,8 +175,19 @@ quiet_cmd_vdsocc = CC32    $@
       cmd_vdsocc = $(CC_COMPAT) -Wp,-MD,$(depfile) $(VDSO_CFLAGS) -c -o $@ $<
 quiet_cmd_vdsocc_gettimeofday = CC32    $@
       cmd_vdsocc_gettimeofday = $(CC_COMPAT) -Wp,-MD,$(depfile) $(VDSO_CFLAGS) $(VDSO_CFLAGS_gettimeofday_o) -c -o $@ $<
+
+# NOTE: patched — when clang is CC, CC_COMPAT (clang --target=arm-linux-gnueabi)
+# cannot assemble sigreturn.S with the integrated assembler (old-style
+# ".pad #imm" / ":lower16:"/":upper16:" relocations are unsupported by LLVM's
+# ARM32 IAS). Force the real GNU cross compiler (CROSS_COMPILE_COMPAT, e.g.
+# arm-linux-gnueabihf-) to assemble this one file instead, regardless of
+# which compiler is used for the C vDSO sources above.
 quiet_cmd_vdsoas = AS32    $@
+ifeq ($(CONFIG_CC_IS_CLANG), y)
+      cmd_vdsoas = $(CROSS_COMPILE_COMPAT)gcc -Wp,-MD,$(depfile) $(VDSO_AFLAGS) -c -o $@ $<
+else
       cmd_vdsoas = $(CC_COMPAT) -Wp,-MD,$(depfile) $(VDSO_AFLAGS) -c -o $@ $<
+endif
 
 quiet_cmd_vdsomunge = MUNGE   $@
       cmd_vdsomunge = $(obj)/$(munge) $< $@
