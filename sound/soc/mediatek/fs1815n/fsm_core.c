@@ -4,11 +4,13 @@
  */
 
 #include "fsm_public.h"
+#include <linux/gpio.h>
 
 #define CRC16_TABLE_SIZE      256
 #define CRC16_POLY_NOMIAL     0xA001
 
 static int fsm_try_init(void);
+static int g_dev_inited = 0;
 
 static LIST_HEAD(fsm_dev_list);
 #define fsm_list_init(fsm_dev) \
@@ -24,7 +26,7 @@ static LIST_HEAD(fsm_dev_list);
 				ops(fsm_dev); \
 			} \
 		} \
-	} while (0)
+	} while(0)
 
 #define fsm_list_func(fsm_dev, func) \
 	do { \
@@ -33,7 +35,7 @@ static LIST_HEAD(fsm_dev_list);
 				func(fsm_dev); \
 			} \
 		} \
-	} while (0)
+	} while(0)
 
 #define fsm_list_check(fsm_dev, type, ret) \
 	do { \
@@ -46,7 +48,7 @@ static LIST_HEAD(fsm_dev_list);
 				} \
 			} \
 		} \
-	} while (0)
+	} while(0)
 
 #define fsm_list_return(fsm_dev, func, ret) \
 	do { \
@@ -56,7 +58,7 @@ static LIST_HEAD(fsm_dev_list);
 				ret |= func(fsm_dev); \
 			} \
 		} \
-	} while (0)
+	} while(0)
 
 #define fsm_list_func_arg(fsm_dev, func, argv) \
 	do { \
@@ -65,7 +67,7 @@ static LIST_HEAD(fsm_dev_list);
 				func(fsm_dev, argv); \
 			} \
 		} \
-	} while (0)
+	} while(0)
 
 
 static uint16_t g_crc16table[CRC16_TABLE_SIZE] = {
@@ -279,7 +281,7 @@ int fsm_set_bf(fsm_dev_t *fsm_dev, const uint16_t bf, const uint16_t val)
 	reg.value = oldval & (~msk);
 	reg.value |= val << reg.pos;
 
-	if (oldval == reg.value) {
+	if(oldval == reg.value) {
 		return 0;
 	}
 	ret = fsm_reg_write(fsm_dev, reg.addr, reg.value);
@@ -310,7 +312,7 @@ int fsm_get_bf(fsm_dev_t *fsm_dev, const uint16_t bf, uint16_t *pval)
 	}
 	msk = ((1 << (reg.len + 1)) - 1) << reg.pos;
 	reg.value &= msk;
-	if (pval) {
+	if(pval) {
 		*pval = reg.value >> reg.pos;
 	}
 
@@ -503,34 +505,25 @@ static int fs1815_regs_compat_v1(fsm_dev_t *fsm_dev, reg_unit_t *reg)
 		if (reg->pos <= 8 && (reg->pos + reg->len) >= 12) {
 			mask = ((8 - reg->pos) << 8) | 0x4000 | addr; // bit[12..8]
 			val = get_bf_val(mask, reg->value);
-			if (val <= 0x07)
-				val = val + 0;
-			else if (val <= 0x0F)
-				val = val + 2;
-			else if (val <= 0x17)
-				val = val + 4;
-			else if (val == 0x18)
-				val = 0X1E;
-			else
-				val = 0x1F;
+			if (val <= 0x07) val = val + 0;
+			else if (val <= 0x0F) val = val + 2;
+			else if (val <= 0x17) val = val + 4;
+			else if (val == 0x18) val = 0X1E;
+			else val = 0x1F;
 			temp = reg->value;
 			set_bf_val(&temp, mask, val);
 			val = temp;
 		}
-	} else if (addr >= 0x59 && addr <= 0x5C) {
+	}
+	else if (addr >= 0x59 && addr <= 0x5C) {
 		if (reg->pos == 0 && reg->len >= 3) {
 			mask = 0x3000 | addr; // bit[3..0]
 			val = get_bf_val(mask, reg->value);
-			if (val <= 0x2)
-				val = val * 2 + 1;
-			else if (val <= 0x4)
-				val = 0x6;
-			else if (val <= 0x9)
-				val = val + 2;
-			else if (val <= 0xB)
-				val = 0xC;
-			else
-				val = 0xE;
+			if (val <= 0x2) val = val * 2 + 1;
+			else if (val <= 0x4) val = 0x6;
+			else if (val <= 0x9) val = val + 2;
+			else if (val <= 0xB) val = 0xC;
+			else val = 0xE;
 			temp = reg->value;
 			set_bf_val(&temp, mask, val);
 			val = temp;
@@ -544,16 +537,6 @@ static int fs1815_regs_compat_v1(fsm_dev_t *fsm_dev, reg_unit_t *reg)
 
 	return ret;
 }
-
-/* BSP.Audio - 2020.12.06 - modify to add kcontrol for closing AGC */
-int fs1815_set_agc(fsm_dev_t *fsm_dev, bool enable)
-{
-	if (!fsm_dev) {
-		return -EINVAL;
-	}
-	return fsm_set_bf(fsm_dev, 0x0F58, enable);
-}
-/* end modify */
 
 int fsm_reg_update_bits(fsm_dev_t *fsm_dev, reg_unit_t *reg)
 {
@@ -672,7 +655,7 @@ int fsm_get_srate_bits(fsm_dev_t *fsm_dev, uint32_t srate)
 	if (srate == 32000 && fsm_dev->is1603s) {
 		return 6; // I2SSR=6
 	}
-	size = sizeof(g_srate_tbl) / sizeof(struct fsm_srate);
+	size = sizeof(g_srate_tbl)/ sizeof(struct fsm_srate);
 	for (idx = 0; idx < size; idx++) {
 		if (srate == g_srate_tbl[idx].srate)
 			return g_srate_tbl[idx].bf_val;
@@ -707,33 +690,28 @@ int fsm_reg_dump(fsm_dev_t *fsm_dev)
 	int idx = 0;
 	int ret = 0;
 
-	if (!fsm_dev)
+	if (!fsm_dev) {
 		return -EINVAL;
-
+	}
 	reg_end = (fsm_dev->is1958 ? 0xEF : (fsm_dev->is1820 ? 0xEA : 0xE8));
 	for (reg_addr = 0; reg_addr <= reg_end; reg_addr++) {
 		if (fsm_dev->is1958) {
-			if (reg_addr == 0x60)
-				reg_addr = 0x80;
-			else if (reg_addr == 0x81)
-				reg_addr = 0xA1;
+			if (reg_addr == 0x60) reg_addr = 0x80;
+			else if (reg_addr == 0x81) reg_addr = 0xA1;
 			else if (reg_addr == 0xD0)
 				ret |= fsm_access_key(fsm_dev, 1);
 		}
 		if (fsm_dev->is1820) {
-			if (reg_addr == 0x60)
-				reg_addr = 0x80;
-		} else if (reg_addr == 0x10)
-			reg_addr = 0x40;
+			if (reg_addr == 0x60) reg_addr = 0x80;
+		}
+		else if (reg_addr == 0x10) reg_addr = 0x40;
 		else if (reg_addr == 0xD0) {
 			ret |= fsm_access_key(fsm_dev, 1);
 		}
 		ret |= fsm_reg_read(fsm_dev, reg_addr, &value);
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 start*/
 		snprintf(buf+idx*8, 9, "%02X:%04X ", reg_addr, value);
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 end*/
 		idx++;
-		if (idx % 8 == 0 || reg_addr == reg_end) {
+		if (idx == 8 || reg_addr == reg_end) {
 			buf[idx*8-1] = '\0';
 			pr_addr(info, "%s", buf);
 			idx = 0;
@@ -997,20 +975,16 @@ int fsm_parse_preset(const void *data, uint32_t size)
 	crc_size = (size - sizeof(struct preset_header) + 2)/sizeof(uint16_t);
 	if (hdr->size == 0 || hdr->size != size) {
 		pr_err("invalid size: hdr:%d, fw:%d", hdr->size, size);
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 start*/
 		fsm_free_mem((void **)&pfile);
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 end*/
 		return -EINVAL;
 	}
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 end*/
 	checksum = fsm_calc_checksum((uint16_t *)(&(pfile->hdr.ndev)), crc_size);
 	if (checksum != hdr->crc16) {
 		pr_err("checksum(%04X) not match(%04X)", checksum, hdr->crc16);
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 start*/
 		fsm_free_mem((void **)&pfile);
-/*K19A code for HQ-145950 by zhangpeng at 2021.7.12 end*/
 		return -EINVAL;
-	} else {
+	}
+	else {
 		pr_info("checksum success!");
 		fsm_set_presets(pfile);
 	}
@@ -1022,12 +996,15 @@ int fsm_parse_preset(const void *data, uint32_t size)
 int fsm_swap_channel(fsm_dev_t *fsm_dev, int next_angle)
 {
 	uint16_t left_chn;
-	//uint8_t i2sctrl;
 	uint16_t chs12;
 	int ret = 0;
 
 	if (!fsm_dev) {
 		return -EINVAL;
+	}
+	if (fsm_dev->is1820) {
+		/* fs1815 not supported */
+		return 0;
 	}
 	switch (next_angle) {
 	case 90:
@@ -1051,10 +1028,8 @@ int fsm_swap_channel(fsm_dev_t *fsm_dev, int next_angle)
 		chs12 = 3;
 	}
 	if (fsm_dev->is1958) {
-		//i2sctrl = 0x17;
 		ret = fsm_set_bf(fsm_dev, 0x1317, chs12); // 0x17[4..3]
 	} else {
-		//i2sctrl = 0x04;
 		ret = fsm_set_bf(fsm_dev, 0x1304, chs12); // 0x04[4..3]
 	}
 	pr_addr(debug, "pos:%02X, CHS12:%d", fsm_dev->pos_mask, chs12);
@@ -1171,9 +1146,10 @@ int fsm_config_vol(fsm_dev_t *fsm_dev)
 	}
 	// volume = (fsm_dev->state.calibrated ? cfg->volume : 0xDF); // -12dB
 	if (fsm_dev->is1820) {
-		pr_addr(info, "not support for fs1815");
-		return 0; // not supported
-	} else if (fsm_dev->is1958) {
+		/* fs1815 not supported */
+		return 0;
+	}
+	else if (fsm_dev->is1958) {
 		volctrl = 0x16;
 		volume = ((cfg->volume << 1) + 1) << 7;
 	} else {
@@ -1236,6 +1212,9 @@ int fsm_stub_dev_init(fsm_dev_t *fsm_dev)
 		return -EINVAL;
 	}
 
+	if (gpio_is_valid(fsm_dev->rst_gpio))
+		gpio_direction_output(fsm_dev->rst_gpio, 1);
+
 	if (cfg->force_init) {
 		pr_addr(info, "force init");
 	}
@@ -1261,6 +1240,7 @@ int fsm_stub_dev_init(fsm_dev_t *fsm_dev)
 		ret |= fsm_dev->dev_ops.reg_init(fsm_dev);
 	}
 	ret |= fsm_get_rstrim(fsm_dev);
+	ret |= fsm_stub_shut_down(fsm_dev);
 	fsm_dev->errcode = ret;
 
 	return ret;
@@ -1311,17 +1291,10 @@ int fsm_stub_dev_deinit(fsm_dev_t *fsm_dev)
 
 int fsm_save_re25(struct fsm_calib_v2 *data)
 {
-	int ret = 0;
-
 	if (!data) {
 		return -EINVAL;
 	}
-//#if defined(CONFIG_FSM_I2C)
-//	ret |= fsm_write_efsdata(data);
-//#elif defined(FSM_HAL_SUPPORT)
-//	ret |= fsm_hal_save_re25(data);
-//#endif
-	return ret;
+	return -EINVAL;
 }
 
 int fsm_get_re25(struct fsm_calib_v2 *data)
@@ -1333,13 +1306,7 @@ int fsm_get_re25(struct fsm_calib_v2 *data)
 		// already loaded
 		return 0;
 	}
-//#if defined(CONFIG_FSM_I2C)
-//	return fsm_read_efsdata(data);
-//#elif defined(FSM_HAL_SUPPORT)
-//	return fsm_hal_get_re25(data);
-//#else
 	return -EINVAL;
-//#endif
 }
 
 int fsm_dev_count(void)
@@ -1450,7 +1417,8 @@ int fsm_probe(fsm_dev_t *fsm_dev, int addr)
 	}
 
 	fsm_mutex_lock();
-	fsm_dev->addr = addr;
+	if (fsm_dev->addr == 0)
+		fsm_dev->addr = addr;
 	do {
 		ret = fsm_reg_read(fsm_dev, 0x01, &id);
 		if (ret) {
@@ -1548,11 +1516,11 @@ void fsm_init(void)
 	if (ret) { // no device or firmware
 		pr_err("init failed: %d", ret);
 	}
+	g_dev_inited = 1;
 	pr_debug("done");
 	fsm_mutex_unlock();
 }
 
-/* BSP.Audio - 2020.12.06 - modify to add kcontrol for closing AGC */
 static int fsm_get_scene_index(uint16_t scene)
 {
 	int index = 0;
@@ -1596,92 +1564,49 @@ int fsm_scene_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-void fsm_set_agc_fs1815(bool enable)
-{
-	fsm_dev_t *fsm_dev = NULL;
-	fsm_mutex_lock();
-	fsm_list_func_arg(fsm_dev, fs1815_set_agc, enable);
-	fsm_mutex_unlock();
-}
-
-/*int fsm_agc_mode_get(struct snd_kcontrol *kcontrol,
+int fsm_init_put(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
-{
-	fsm_config_t *cfg = fsm_get_config();
-	int volume;
-
-	volume = ((cfg != NULL) ? cfg->volume : FSM_VOLUME_MAX);
-	ucontrol->value.integer.value[0] = volume;
-	pr_info("volume: %ld", ucontrol->value.integer.value[0]);
-
-	return 0;
-}*/
-
-int fsm_agc_mode_put(struct snd_kcontrol *kcontrol,
-			struct snd_ctl_elem_value *ucontrol)
-{
-	int agc_on = ucontrol->value.integer.value[0];
-
-	fsm_set_agc_fs1815(agc_on);
-
-	return 0;
-}
-
-/*K19A code for WXYFB-1010 by zhangpeng at 2021/4/15 start*/
-int fsm_init_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
-{
-	int state;
-
-	state = (fsm_get_presets() != NULL) ? 1 : 0;
-	pr_info("state:%d", state);
-	ucontrol->value.integer.value[0] = state;
-
-	return 0;
-}
-
-int fsm_init_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
 	fsm_init();
 	return 0;
 }
-/*K19A code for WXYFB-1010 by zhangpeng at 2021/4/15 end*/
 
-const struct snd_kcontrol_new fsm_agc_controls[] = {
-	SOC_SINGLE_EXT("FSM_Scene", SND_SOC_NOPM, 0, FSM_SCENE_MAX, 0,
-			fsm_scene_get, fsm_scene_put),
-	SOC_SINGLE_EXT("FSM_AGC_Control", SND_SOC_NOPM, 0, 1, 0,
-			NULL, fsm_agc_mode_put),
-/*K19A code for WXYFB-1010 by zhangpeng at 2021/4/15 start*/
-	SOC_SINGLE_EXT("FSM_Fw_Init", SND_SOC_NOPM, 0, 1, 0,
-		fsm_init_get, fsm_init_put),
-/*K19A code for WXYFB-1010 by zhangpeng at 2021/4/15 end*/
-};
-
-int fsm_add_control(struct snd_soc_component *platform)
+int fsm_init_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
 {
-	snd_soc_add_component_controls(platform, fsm_agc_controls,
-				ARRAY_SIZE(fsm_agc_controls));
+
+	ucontrol->value.integer.value[0] = g_dev_inited;
+	pr_info("dev %s", (g_dev_inited == 1) ? "initilized" : "init failed");
+
 	return 0;
 }
-EXPORT_SYMBOL_GPL(fsm_add_control);
-/* end modify */
 
-/*K19A code for HQ-128766 by zhangpeng at 2021.4.3 start*/
-void fsm_speaker_onn(int mode)
-/*K19A code for HQ-128766 by zhangpeng at 2021.4.3 end*/
+const struct snd_kcontrol_new fsm_snd_controls[] =
+{
+	SOC_SINGLE_EXT("FSM_Scene", SND_SOC_NOPM, 0, FSM_SCENE_MAX, 0,
+			fsm_scene_get, fsm_scene_put),
+	SOC_SINGLE_EXT("FSM_Init", SND_SOC_NOPM, 0, 1, 0,
+			fsm_init_get, fsm_init_put),
+};
+
+void fsm_add_codec_controls(struct snd_soc_component *cmpnt)
+{
+	snd_soc_add_component_controls(cmpnt, fsm_snd_controls,
+				ARRAY_SIZE(fsm_snd_controls));
+}
+EXPORT_SYMBOL_GPL(fsm_add_codec_controls);
+
+void fsm_speaker_onn(void)
 {
 	fsm_config_t *cfg = fsm_get_config();
 	fsm_dev_t *fsm_dev = NULL;
 	int ret;
 
-/*K19A code for HQ-128766 by zhangpeng at 2021.4.3 start*/
-	if (cfg->speaker_on) {
-            pr_info("no need to spk on twice");
-	    return;
-	}
-	cfg->next_scene = mode;
-/*K19A code for HQ-128766 by zhangpeng at 2021.4.3 end*/
 	pr_info("scene: %04X", cfg->next_scene);
+	if (cfg->speaker_on) {
+		pr_info("no need to spk on twice");
+		return;
+	}
 	fsm_mutex_lock();
 	cfg->stream_muted = false;
 	ret = fsm_try_init();
@@ -1697,19 +1622,19 @@ void fsm_speaker_onn(int mode)
 	pr_debug("done");
 	fsm_mutex_unlock();
 }
+EXPORT_SYMBOL_GPL(fsm_speaker_onn);
 
 void fsm_speaker_off(void)
 {
 	fsm_config_t *cfg = fsm_get_config();
 	fsm_dev_t *fsm_dev = NULL;
 	int ret;
-/*K19A code for WXYFB-1010 by xuqingli at 2021/4/20 start*/
-	if (!cfg->speaker_on) {
-            pr_info("no need to spk off twice");
-	    return;
-	    }
-/*K19A code for WXYFB-1010 by xuqingli at 2021/4/20 end*/
+
 	pr_info("scene: %04X", cfg->next_scene);
+	if (!cfg->speaker_on) {
+		pr_info("no need to spk off twice");
+		return;
+	}
 	fsm_mutex_lock();
 	cfg->stream_muted = true;
 	ret = fsm_try_init();
@@ -1721,11 +1646,10 @@ void fsm_speaker_off(void)
 	fsm_list_func(fsm_dev, fsm_stub_shut_down);
 	cfg->speaker_on = false;
 	fsm_mutex_unlock();
-/*K19A code for HQ-128766 by zhangpeng at 2021.4.3 start*/
-	fsm_set_scene(0);
+	fsm_set_scene(0); // scene music
 	pr_debug("done");
-/*K19A code for HQ-128766 by zhangpeng at 2021.4.3 end*/
 }
+EXPORT_SYMBOL_GPL(fsm_speaker_off);
 
 void fsm_stereo_rotation(int next_angle)
 {
